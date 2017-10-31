@@ -217,7 +217,7 @@ function do_conversion ()
     START_TIME=$(date +%s)
 
     # Verify source dir exists
-    if ! test_dir_exists "${1}"; then log true "${SCRIPT_NAME}: Error! Source directory \"${1}\" does not exist. Aborting."; exit ${E_SOURCE}; fi
+    if ! test_dir_exists "${1}"; then log true "${SCRIPT_NAME}: Error! Source directory '${1}' does not exist. Aborting."; exit ${E_SOURCE}; fi
 
     # Locate source file (this is the latest file found in the source directory whose name starts with the given prefix)
     IFS= read -r -d '' SOURCE_FILE \
@@ -225,10 +225,10 @@ function do_conversion ()
     SOURCE_FILE=${SOURCE_FILE#* }
 
     # Verify source file is valid
-    if ! test_var ${SOURCE_FILE} -a test_file_exists "${SOURCE_FILE}"; then log true "${SCRIPT_NAME}: Error! Source file \"${SOURCE_FILE}\" does not exist (or is not readable). Aborting."; exit ${E_SOURCE}; fi
+    if ! test_var ${SOURCE_FILE} -a test_file_exists "${SOURCE_FILE}"; then log true "${SCRIPT_NAME}: Error! Source file '${SOURCE_FILE}' does not exist (or is not readable). Aborting."; exit ${E_SOURCE}; fi
 
     # Verify export dir exists and is writeable
-    if ! test_dir_is_writeable "${4}"; then log true "${SCRIPT_NAME}: Error! Export directory \"${4}\" does not exist (or is not writeable). Aborting."; exit ${E_EXPORT}; fi
+    if ! test_dir_is_writeable "${4}"; then log true "${SCRIPT_NAME}: Error! Export directory '${4}' does not exist (or is not writeable). Aborting."; exit ${E_EXPORT}; fi
 
     # Create temporary workspace
     WORKSPACE="/tmp/.pgsql_export_wspace_${RANDOM}"
@@ -246,7 +246,7 @@ function do_conversion ()
     chgrp ${7} "${WORKSPACE}/export.tar.lzo" || exit ${E_PKG}
 
     # Move to destination
-    log "${SCRIPT_NAME}: Moving compressed export to \"${4}/${5}\""
+    log "${SCRIPT_NAME}: Moving compressed export to '${4}/${5}'"
     mv "${WORKSPACE}/export.tar.lzo" "${4}/${5}" || exit ${E_PKG}
 
     # Remove temporary workspace

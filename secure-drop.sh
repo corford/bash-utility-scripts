@@ -111,7 +111,7 @@ function do_drop ()
     START_TIME=$(date +%s)
 
     # Verify source file exists
-    if ! test_file_exists "${1}"; then log true "${SCRIPT_NAME}: Error! Source file \"${1}\" does not exist (or is not readable). Aborting."; exit ${E_SOURCE}; fi
+    if ! test_file_exists "${1}"; then log true "${SCRIPT_NAME}: Error! Source file '${1}' does not exist (or is not readable). Aborting."; exit ${E_SOURCE}; fi
 
     # Set remote filename as source file with ".gpg" appended
     REMOTE_FILE="$(basename "${1}")".gpg

@@ -110,7 +110,7 @@ function do_backup ()
     log "${SCRIPT_NAME}: Taking backup..."
 
     # Verify backup dir exists and is writeable
-    if ! test_dir_is_writeable "${1}"; then log true "${SCRIPT_NAME}: Error! Backup directory \"${1}\" does not exist (or is not writeable). Aborting."; exit ${E_BACKUP}; fi
+    if ! test_dir_is_writeable "${1}"; then log true "${SCRIPT_NAME}: Error! Backup directory '${1}' does not exist (or is not writeable). Aborting."; exit ${E_BACKUP}; fi
 
     # Create temporary workspace
     WORKSPACE="/tmp/.redis_backup_wspace_${RANDOM}"

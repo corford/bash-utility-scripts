@@ -108,7 +108,7 @@ function do_mirror ()
     log "${SCRIPT_NAME}: Mirroring source to target..."
 
     # Verify source dir exists
-    if ! test_dir_exists "${1}"; then log true "${SCRIPT_NAME}: Error! Source directory \"${1}\" does not exist. Aborting."; exit ${E_SOURCE}; fi
+    if ! test_dir_exists "${1}"; then log true "${SCRIPT_NAME}: Error! Source directory '${1}' does not exist. Aborting."; exit ${E_SOURCE}; fi
 
     # Mirror with lftp
     if [ "${8}" = "lftp" ]; then
