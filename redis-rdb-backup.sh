@@ -1,6 +1,8 @@
 #!/bin/bash
 #
-# Takes an lzop compressed RDB backup of a running redis instance.
+# Takes an RDB backup of a running redis instance and stores it
+# as an lzop compressed tar archive.
+#
 # In order to guarantee an up to date snapshot, the script
 # asks redis to perform a BGSAVE operation prior to creating
 # the RDB file.
@@ -27,6 +29,7 @@ E_BACKUP=5
 # BINPATHS AND GLOBALS
 # ////////////////////////////////////////////////////////////////////
 
+TAR_BIN="$(which tar)"
 LZOP_BIN="$(which lzop)"
 REDIS_CLI_BIN="$(which redis-cli)"
 
@@ -147,10 +150,10 @@ function do_backup ()
     FETCHED_RDB_FILE="${WORKSPACE}/dump.rdb"
     "${7}" -h ${5} -p ${6} --rdb "${FETCHED_RDB_FILE}" &>/dev/null || exit ${E_BACKUP}
 
-    # Compress with lzop
+    # Tar and compress with lzop
     log "${SCRIPT_NAME}: Compressing..."
-    BACKUP_FILE="${2}.$(date +%Y-%m-%dT%H-%M-%S).rdb.lzo"
-    "${8}" -5 < "${FETCHED_RDB_FILE}" > "${WORKSPACE}/${BACKUP_FILE}" || exit ${E_BACKUP}
+    BACKUP_FILE="${2}.$(date +%Y-%m-%dT%H-%M-%S).tar.lzo"
+    "${8}" -cf - -C "${WORKSPACE}" . | "${9}" -5 > "${WORKSPACE}/${BACKUP_FILE}" || exit ${E_BACKUP}
 
     # Set permissions
     chmod 600 "${WORKSPACE}/${BACKUP_FILE}"
@@ -162,7 +165,7 @@ function do_backup ()
     chgrp ${4} "${WORKSPACE}/${BACKUP_FILE}" || exit ${E_PKG}
 
     # Remove any previous backup(s) at destination
-    rm -f "${1}/${2}"*.rdb.lzo || exit ${E_PKG}
+    rm -f "${1}/${2}"*.tar.lzo || exit ${E_PKG}
 
     # Move backup to destination
     mv "${WORKSPACE}/${BACKUP_FILE}" "${1}/${BACKUP_FILE}" || exit ${E_PKG}
@@ -214,6 +217,9 @@ while getopts "${OPTSPEC}" OPT; do
     esac
 done
 
+# Check tar is available
+if ! test_bin "${TAR_BIN}"; then echo 'Could not find "tar"' >&2; exit ${E_MISSING_DEPENDENCY}; fi
+
 # Check lzop is available
 if ! test_bin "${LZOP_BIN}"; then echo 'Could not find "lzop"' >&2; exit ${E_MISSING_DEPENDENCY}; fi
 
@@ -229,6 +235,6 @@ if ! test_var ${BACKUP_FILE_GROUP}; then echo "${E_MSG}" >&2; exit ${E_MISSING_A
 if ! test_var ${REDIS_HOST}; then echo "${E_MSG}" >&2; exit ${E_MISSING_ARG}; fi
 if ! test_var ${REDIS_PORT}; then echo "${E_MSG}" >&2; exit ${E_MISSING_ARG}; fi
 
-do_backup "${BACKUP_DIR}" "${BACKUP_FILE_PREFIX}" "${BACKUP_FILE_OWNER}" "${BACKUP_FILE_GROUP}" "${REDIS_HOST}" "${REDIS_PORT}" "${REDIS_CLI_BIN}" "${LZOP_BIN}"
+do_backup "${BACKUP_DIR}" "${BACKUP_FILE_PREFIX}" "${BACKUP_FILE_OWNER}" "${BACKUP_FILE_GROUP}" "${REDIS_HOST}" "${REDIS_PORT}" "${REDIS_CLI_BIN}" "${TAR_BIN}" "${LZOP_BIN}"
 
 exit 0
