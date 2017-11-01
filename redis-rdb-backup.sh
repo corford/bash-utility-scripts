@@ -22,7 +22,8 @@ E_INVALID_OPT=1
 E_MISSING_ARG=2
 E_MISSING_DEPENDENCY=3
 E_SOURCE=4
-E_BACKUP=5
+E_WORKSPACE=5
+E_BACKUP=6
 
 
 # ////////////////////////////////////////////////////////////////////
@@ -153,7 +154,10 @@ function do_backup ()
     # Tar and compress with lzop
     log "${SCRIPT_NAME}: Compressing..."
     BACKUP_FILE="${2}.$(date +%Y-%m-%dT%H-%M-%S).tar.lzo"
-    "${8}" -cf - -C "${WORKSPACE}" . | "${9}" -5 > "${WORKSPACE}/${BACKUP_FILE}" || exit ${E_BACKUP}
+    "${8}" --exclude="${BACKUP_FILE}" -cf - -C "${WORKSPACE}" . | "${9}" -5 > "${WORKSPACE}/${BACKUP_FILE}" || exit ${E_BACKUP}
+
+    # Check there were no errors
+    if [ $? -ne 0 -o ${PIPESTATUS[0]} -ne 0 ]; then log true "${SCRIPT_NAME}: Error! tar or lzop reported an error. Aborting."; exit ${E_PKG}; fi
 
     # Set permissions
     chmod 600 "${WORKSPACE}/${BACKUP_FILE}"

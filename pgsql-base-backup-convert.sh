@@ -169,7 +169,7 @@ function do_import ()
 function do_export ()
 {
     # Get list of databases to dump (exclude postgres, template0 and template1)
-    DATABASES=$("${7}" -h localhost -U "${4}" -d postgres -q -A -t -c "SELECT dbname FROM pg_database WHERE dbname !='template0' AND dbname !='template1' AND dbname !='postgres'")
+    DATABASES=$("${7}" -h localhost -U "${4}" -d postgres -q -A -t -c "SELECT datname FROM pg_database WHERE datname !='template0' AND datname !='template1' AND datname !='postgres'")
 
     # Verify we have a valid list
     if ! test_var ${DATABASES}; then log true "${SCRIPT_NAME}: Error! No database(s) found. Aborting."; return 1; fi
@@ -203,7 +203,7 @@ function do_export ()
     done
 
     # Tar and compress
-    "${8}" -cf - -C "${1}" . | "${9}" -5 > "${1}/export.tar.lzo"
+    "${8}" --exclude="export.tar.lzo" -cf - -C "${1}" . | "${9}" -5 > "${1}/export.tar.lzo"
 
     # Check there were no errors
     if [ $? -ne 0 -o ${PIPESTATUS[0]} -ne 0 ]; then log true "${SCRIPT_NAME}: Error! tar or lzop reported an error. Aborting."; return 1; fi
@@ -225,7 +225,7 @@ function do_conversion ()
     SOURCE_FILE=${SOURCE_FILE#* }
 
     # Verify source file is valid
-    if ! test_var ${SOURCE_FILE} -a test_file_exists "${SOURCE_FILE}"; then log true "${SCRIPT_NAME}: Error! Source file '${SOURCE_FILE}' does not exist (or is not readable). Aborting."; exit ${E_SOURCE}; fi
+    if ! test_var ${SOURCE_FILE} -a test_file_exists "${SOURCE_FILE}"; then log true "${SCRIPT_NAME}: Error! Could not locate source file. Aborting."; exit ${E_SOURCE}; fi
 
     # Verify export dir exists and is writeable
     if ! test_dir_is_writeable "${4}"; then log true "${SCRIPT_NAME}: Error! Export directory '${4}' does not exist (or is not writeable). Aborting."; exit ${E_EXPORT}; fi

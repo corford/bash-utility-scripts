@@ -22,8 +22,9 @@ E_INVALID_OPT=1
 E_MISSING_ARG=2
 E_MISSING_DEPENDENCY=3
 E_SOURCE=4
-E_ENCRYPT=5
-E_TRANSFER=6
+E_WORKSPACE=5
+E_ENCRYPT=6
+E_TRANSFER=7
 
 
 # ////////////////////////////////////////////////////////////////////

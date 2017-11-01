@@ -180,7 +180,7 @@ IFS= read -r -d '' BACKUP_FILE \
 BACKUP_FILE=${BACKUP_FILE#* }
 
 # Verify backup file is valid
-if ! test_var ${BACKUP_FILE} -a test_file_exists "${BACKUP_FILE}"; then log true "${SCRIPT_NAME}: Error! Backup file \"${BACKUP_FILE}\" does not exist (or is not readable). Aborting."; exit ${E_BACKUP}; fi
+if ! test_var ${BACKUP_FILE} -a test_file_exists "${BACKUP_FILE}"; then log true "${SCRIPT_NAME}: Error! Could not locate backup file. Aborting."; exit ${E_BACKUP}; fi
 
 # Encrypt and copy to remote
 "${SECURE_DROP_SCRIPT}" -s "${BACKUP_FILE}" -k "${GPG_PUB_KEY}" -r "${REMOTE_SFTP_HOST}" -u ${REMOTE_SFTP_USER} -p "${REMOTE_SFTP_PATH}" -m ${REMOTE_FILE_MODE} || exit ${E_SECURE_DROP}
