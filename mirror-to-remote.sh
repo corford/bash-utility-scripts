@@ -4,6 +4,9 @@
 # or lftp (useful when the remote host doesn't allow or support rsync e.g. an
 # sftp-only jail). Supports bandwidth limiting.
 #
+# Execute with -h flag to see required script params.
+#
+#
 # Note 1: Files and dirs not present in the source directory will be deleted from
 # the remote directory. Hidden files or dirs (dot files) will not be mirrored.
 #
@@ -112,11 +115,11 @@ function do_mirror ()
 
     # Mirror with lftp
     if [ "${8}" = "lftp" ]; then
-        "${10}" -e "set net:limit-max ${5}K; set net:timeout ${6}; set net:max-retries 10; set net:reconnect-interval-base 3; set net:reconnect-interval-max 3; set net:reconnect-interval-multiplier 1; mirror -R -e -c -x '(^|/)\.' --log=${7} ${1} ${4}; quit" -u ${3}, sftp://${2} || exit ${E_MIRROR}
+        "${LFTP_BIN}" -e "set net:limit-max ${5}K; set net:timeout ${6}; set net:max-retries 10; set net:reconnect-interval-base 3; set net:reconnect-interval-max 3; set net:reconnect-interval-multiplier 1; mirror -R -e -c -x '(^|/)\.' --log=${7} ${1} ${4}; quit" -u ${3}, sftp://${2} || exit ${E_MIRROR}
 
     # Mirror with rsync (default)
     else
-        "${9}" -aq --exclude=".*" --exclude=".*/" --safe-links --delete-after --bwlimit=${5} --timeout=${6} --log-file=${7} "${1}/" "${3}@${2}:${4}" || exit ${E_MIRROR}
+        "${RSYNC_BIN}" -aq --exclude=".*" --exclude=".*/" --safe-links --delete-after --bwlimit=${5} --timeout=${6} --log-file=${7} "${1}/" "${3}@${2}:${4}" || exit ${E_MIRROR}
 
     fi
 
@@ -183,6 +186,6 @@ if ! test_var ${TIMEOUT_SECS}; then echo "${E_MSG}" >&2; exit ${E_MISSING_ARG}; 
 if ! test_var ${ENGINE}; then echo "${E_MSG}" >&2; exit ${E_MISSING_ARG}; fi
 
 # Perform mirror
-do_mirror "${SOURCE_DIR}" ${REMOTE_HOST} ${REMOTE_USER} "${REMOTE_PATH}" ${BWLIMIT_KB} ${TIMEOUT_SECS} ${LOGFILE} ${ENGINE} "${RSYNC_BIN}" "${LFTP_BIN}"
+do_mirror "${SOURCE_DIR}" ${REMOTE_HOST} ${REMOTE_USER} "${REMOTE_PATH}" ${BWLIMIT_KB} ${TIMEOUT_SECS} ${LOGFILE} ${ENGINE}
 
 exit 0

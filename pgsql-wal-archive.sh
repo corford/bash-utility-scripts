@@ -1,8 +1,8 @@
 #!/bin/bash
 #
-# Ships postgres WAL archive files to a remote location using lftp
+# Ships postgres WAL archive files to a remote location using lftp.
 #
-# Note: remote SFTP path must be absolute (i.e. begin with a /)
+# Execute with -h flag to see required script params.
 #
 
 # ////////////////////////////////////////////////////////////////////
@@ -104,7 +104,7 @@ function test_file_exists ()
 function test_remote_file_exists ()
 {
     # LFTP allows running `find` remotely (which is in the SFTP protocol but not supported by stock sftp)
-    "${5}" -e "find ${1} || exit 1; quit;" -u ${3}, sftp://${2}/${4} &>/dev/null
+    "${LFTP_BIN}" -e "find ${1} || exit 1; quit;" -u ${3}, sftp://${2}/${4} &>/dev/null
 
     if [ $? -eq 0 ]; then
         return 1
@@ -115,7 +115,7 @@ function test_remote_file_exists ()
 
 function archive_wal_file ()
 {
-    "${7}" -e "put ${1} || exit 1; chmod ${6} ${2} || exit 1; quit;" -u ${4}, sftp://${3}/${5} &>/dev/null
+    "${LFTP_BIN}" -e "put ${1} || exit 1; chmod ${6} ${2} || exit 1; quit;" -u ${4}, sftp://${3}/${5} &>/dev/null
 
     if [ $? -ne 0 ]; then
         return 1
@@ -180,12 +180,12 @@ if ! test_var ${REMOTE_SFTP_PATH}; then echo "${E_MSG}" >&2; exit ${E_MISSING_AR
 if ! test_var ${REMOTE_FILE_MODE}; then echo "${E_MSG}" >&2; exit ${E_MISSING_ARG}; fi
 
 # Check WAL file exists locally
-if ! test_file_exists "${WAL_ABSOLUTE_FILE_NAME}"; then log true "${SCRIPT_NAME}: Error! Local WAL file \"${WAL_ABSOLUTE_FILE_NAME}\" does not exist (or is not readable). File was not archived."; exit ${E_SOURCE}; fi
+if ! test_file_exists "${WAL_ABSOLUTE_FILE_NAME}"; then log true "${SCRIPT_NAME}: Error! Local WAL file '${WAL_ABSOLUTE_FILE_NAME}' does not exist (or is not readable). File was not archived."; exit ${E_SOURCE}; fi
 
 # Check WAL file doesn't already exist at the remote destination
-if ! test_remote_file_exists "${WAL_FILE_NAME}" ${REMOTE_SFTP_HOST} ${REMOTE_SFTP_USER} "${REMOTE_SFTP_PATH}" "${LFTP_BIN}"; then log true "${SCRIPT_NAME}: Error! WAL file \"${WAL_FILE_NAME}\" already exists at remote. File was not archived."; exit ${E_ARCHIVE}; fi
+if ! test_remote_file_exists "${WAL_FILE_NAME}" ${REMOTE_SFTP_HOST} ${REMOTE_SFTP_USER} "${REMOTE_SFTP_PATH}"; then log true "${SCRIPT_NAME}: Error! WAL file '${WAL_FILE_NAME}' already exists at remote. File was not archived."; exit ${E_ARCHIVE}; fi
 
 # Archive WAL file
-if ! archive_wal_file "${WAL_ABSOLUTE_FILE_NAME}" "${WAL_FILE_NAME}" ${REMOTE_SFTP_HOST} ${REMOTE_SFTP_USER} "${REMOTE_SFTP_PATH}" ${REMOTE_FILE_MODE} "${LFTP_BIN}"; then log true "${SCRIPT_NAME}: Error! Problem sending WAL file \"${WAL_ABSOLUTE_FILE_NAME}\" to remote. File was not archived."; exit ${E_ARCHIVE}; fi
+if ! archive_wal_file "${WAL_ABSOLUTE_FILE_NAME}" "${WAL_FILE_NAME}" ${REMOTE_SFTP_HOST} ${REMOTE_SFTP_USER} "${REMOTE_SFTP_PATH}" ${REMOTE_FILE_MODE}; then log true "${SCRIPT_NAME}: Error! Problem sending WAL file '${WAL_ABSOLUTE_FILE_NAME}' to remote. File was not archived."; exit ${E_ARCHIVE}; fi
 
 exit 0

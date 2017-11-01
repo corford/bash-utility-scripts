@@ -97,7 +97,7 @@ function test_file_exists ()
 # ////////////////////////////////////////////////////////////////////
 
 # Parse and verify command line options
-OPTSPEC=":ha:d:f:o:g:r:p:b:k:x:y:z:m:"
+OPTSPEC=":ha:d:f:o:g:m:t:r:p:b:k:x:y:z:j:"
 while getopts "${OPTSPEC}" OPT; do
     case ${OPT} in
         a)
@@ -114,6 +114,12 @@ while getopts "${OPTSPEC}" OPT; do
             ;;
         g)
             BACKUP_FILE_GROUP=${OPTARG}
+            ;;
+        m)
+            BACKUP_FILE_MODE=${OPTARG}
+            ;;
+        t)
+            BACKUP_FILE_TIMESTAMP=${OPTARG} # Auto append ISO 8601 timestamp to backup file prefix
             ;;
         r)
             REDIS_HOST=${OPTARG}
@@ -136,12 +142,12 @@ while getopts "${OPTSPEC}" OPT; do
         z)
             REMOTE_SFTP_PATH=$(echo "${OPTARG}" | sed -e "s/\/*$//")
             ;;
-        m)
+        j)
             REMOTE_FILE_MODE=${OPTARG}
             ;;
         h)
             echo ""
-            echo "Usage: ${SCRIPT_NAME} -a backup_script -d backup_dir -f backup_file_prefix -o backup_file_owner -o backup_file_group -r redis_host -p redis_port -b secure_drop_script -k gpg_key_id -x remote_sftp_host -y remote_sftp_user -z remote_sftp_path -m remote_file_mode"
+            echo "Usage: ${SCRIPT_NAME} -a backup_script -d backup_dir -f backup_file_prefix -o backup_file_owner -g backup_file_group -m backup_file_mode -t [true|false] -r redis_host -p redis_port -b secure_drop_script -k gpg_key_id -x remote_sftp_host -y remote_sftp_user -z remote_sftp_path -j remote_file_mode"
             echo ""
             exit 0
             ;;
@@ -159,6 +165,8 @@ if ! test_var ${BACKUP_DIR}; then echo "${E_MSG}" >&2; exit ${E_MISSING_ARG}; fi
 if ! test_var ${BACKUP_FILE_PREFIX}; then echo "${E_MSG}" >&2; exit ${E_MISSING_ARG}; fi
 if ! test_var ${BACKUP_FILE_OWNER}; then echo "${E_MSG}" >&2; exit ${E_MISSING_ARG}; fi
 if ! test_var ${BACKUP_FILE_GROUP}; then echo "${E_MSG}" >&2; exit ${E_MISSING_ARG}; fi
+if ! test_var ${BACKUP_FILE_MODE}; then echo "${E_MSG}" >&2; exit ${E_MISSING_ARG}; fi
+if ! test_var ${BACKUP_FILE_TIMESTAMP}; then echo "${E_MSG}" >&2; exit ${E_MISSING_ARG}; fi
 if ! test_var ${REDIS_HOST}; then echo "${E_MSG}" >&2; exit ${E_MISSING_ARG}; fi
 if ! test_var ${REDIS_PORT}; then echo "${E_MSG}" >&2; exit ${E_MISSING_ARG}; fi
 if ! test_var ${SECURE_DROP_SCRIPT}; then echo "${E_MSG}" >&2; exit ${E_MISSING_ARG}; fi
@@ -168,7 +176,7 @@ if ! test_var ${REMOTE_SFTP_USER}; then echo "${E_MSG}" >&2; exit ${E_MISSING_AR
 if ! test_var ${REMOTE_FILE_MODE}; then echo "${E_MSG}" >&2; exit ${E_MISSING_ARG}; fi
 
 # Take backup
-"${BACKUP_SCRIPT}" -d "${BACKUP_DIR}" -f "${BACKUP_FILE_PREFIX}" -o "${BACKUP_FILE_OWNER}" -g "${BACKUP_FILE_GROUP}" -r "${REDIS_HOST}" -p ${REDIS_PORT} || exit ${E_BACKUP}
+"${BACKUP_SCRIPT}" -d "${BACKUP_DIR}" -f "${BACKUP_FILE_PREFIX}" -o "${BACKUP_FILE_OWNER}" -g "${BACKUP_FILE_GROUP}" -m ${BACKUP_FILE_MODE} -t ${BACKUP_FILE_TIMESTAMP} -r "${REDIS_HOST}" -p ${REDIS_PORT} || exit ${E_BACKUP}
 
 # Locate resulting backup file (this is the latest file found in ${BACKUP_DIR} whose name starts with ${BACKUP_FILE_PREFIX}
 IFS= read -r -d '' BACKUP_FILE \

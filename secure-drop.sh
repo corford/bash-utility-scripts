@@ -4,7 +4,12 @@
 # and transfers it to a remote server via sftp. Useful for e.g. securely copying
 # database backups off-site.
 #
-# Note: Remember to add the public key of the host running this script to the
+# Execute with -h flag to see required script params.
+#
+#
+# Note 1: Remote filename will be the source file with ".gpg" appended.
+#
+# Note 2: Remember to add the public key of the host running this script to the
 # authorized_keys file of the remote host.
 #
 
@@ -114,20 +119,18 @@ function do_drop ()
     # Verify source file exists
     if ! test_file_exists "${1}"; then log true "${SCRIPT_NAME}: Error! Source file '${1}' does not exist (or is not readable). Aborting."; exit ${E_SOURCE}; fi
 
-    # Set remote filename as source file with ".gpg" appended
-    REMOTE_FILE="$(basename "${1}")".gpg
-
     # Create temporary workspace
     WORKSPACE="/tmp/.secure_drop_wspace_${RANDOM}"
     create_workspace "${WORKSPACE}" || exit ${E_WORKSPACE}
 
-    log "${SCRIPT_NAME}: Encrypting source file..."
+    # Set remote filename as source file with ".gpg" appended
+    REMOTE_FILE="$(basename "${1}")".gpg
 
-    "${7}" -z 0 -r "${6}" -e -o "${WORKSPACE}/${REMOTE_FILE}" "${1}" || exit ${E_ENCRYPT}
+    log "${SCRIPT_NAME}: Encrypting source file..."
+    "${GPG_BIN}" -z 0 -r "${6}" -e -o "${WORKSPACE}/${REMOTE_FILE}" "${1}" || exit ${E_ENCRYPT}
 
     log "${SCRIPT_NAME}: Transferring to remote..."
-
-    "${8}" -o PasswordAuthentication=no -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=QUIET -q -b - ${3}@${2}:"${4}" <<END &>/dev/null
+    "${SFTP_BIN}" -o PasswordAuthentication=no -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=QUIET -q -b - ${3}@${2}:"${4}" <<END &>/dev/null
 put "${WORKSPACE}/${REMOTE_FILE}"
 chmod ${5} "${REMOTE_FILE}"
 quit
@@ -199,6 +202,6 @@ if ! test_var ${REMOTE_SFTP_PATH}; then echo "${E_MSG}" >&2; exit ${E_MISSING_AR
 if ! test_var ${REMOTE_SFTP_USER}; then echo "${E_MSG}" >&2; exit ${E_MISSING_ARG}; fi
 if ! test_var ${REMOTE_FILE_MODE}; then echo "${E_MSG}" >&2; exit ${E_MISSING_ARG}; fi
 
-do_drop "${SOURCE_FILE}" "${REMOTE_SFTP_HOST}" ${REMOTE_SFTP_USER} "${REMOTE_SFTP_PATH}" ${REMOTE_FILE_MODE} ${GPG_PUB_KEY} "${GPG_BIN}" "${SFTP_BIN}"
+do_drop "${SOURCE_FILE}" "${REMOTE_SFTP_HOST}" ${REMOTE_SFTP_USER} "${REMOTE_SFTP_PATH}" ${REMOTE_FILE_MODE} ${GPG_PUB_KEY}
 
 exit 0

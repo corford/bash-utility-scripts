@@ -1,20 +1,23 @@
 #!/bin/bash
 #
 # Imports a basebackup of a master PostgreSQL server to an intermediary server and
-# re-exports as an lzop compressed tar archive of raw sql files (produced with pg_dump).
+# re-exports as a gzip compressed tar archive of raw sql files (produced with pg_dump).
+#
+# Execute with -h flag to see required script params.
+#
 #
 # Why ?
 #
 # Backups produced with pg_basebackup give an opaque (and large) database snapshot.
-# Re-exporting with pg_dump lets you seperate role, schema and table data in to smaller
-# discrete SQL files that can be more easily moved around and imported to systems other
-# than PostgresSQL.
+# Re-exporting with pg_dump lets you seperate role, schema and table data in to discrete
+# SQL files that can be more easily moved around (they compress well) and imported
+# to systems other than PostgresSQL.
 #
 # Script has to import and export through an intermediary postgesql server because pg_dump
 # cannot (yet) work directly with pg_basebackup snapshots.
 #
 # Note 1:
-# Source file is expected to be an lzop compressed tar archive produced by pg_basebackup
+# Source file is expected to be a gzip compressed tar archive produced with pg_basebackup
 #
 # Note 2:
 # Intermediary postgres server is expected to run on the same host as this script and
@@ -25,7 +28,7 @@
 # Resulting export archive layout (template0, template1 and postgres databases
 # are always ignored by this script):
 #
-# - export.tar.lzo
+# - export.tar.gz
 # --| cluster-roles.sql
 # --| dbname1
 # ----| db-schema.sql
@@ -61,12 +64,17 @@ E_PKG=9
 # BINPATHS AND GLOBALS
 # ////////////////////////////////////////////////////////////////////
 
-LZOP_BIN="$(which lzop)"
 TAR_BIN="$(which tar)"
+GZIP_BIN="$(which gzip)"
 SERVICE_BIN="$(which service)"
 PGDUMP_BIN="$(which pg_dump)"
 PGDUMPALL_BIN="$(which pg_dumpall)"
 PSQL_BIN="$(which psql)"
+
+GZIP_COMPRESSION=4
+POSTGRES_SERIVCE_NAME="postgresql"
+POSTGRES_OWNER="postgres"
+POSTGRES_GROUP="postgres"
 
 
 # ////////////////////////////////////////////////////////////////////
@@ -144,20 +152,20 @@ function create_workspace ()
 function do_import ()
 {
     # Stop postgres
-    "${5}" postgresql stop
+    "${SERVICE_BIN}" ${POSTGRES_SERIVCE_NAME} stop
     sleep 5
 
     # Remove old postgres data dir (if present) and extract basebackup in to place
-    test_dir_is_writeable "$(dirname "${3}")" || return 1
-    if test_dir_exists "${3}"; then rm -rf "${3}" || return 1; fi
-    mkdir "${3}" || return 1
-    chmod 700 "${3}" || return 1
-    chown postgres:postgres "${3}" || return 1
-    log "${SCRIPT_NAME}: Extracting basebackup to \"${3}\"..."
-    "${4}" -d < "${1}" | "${2}" -C "${3}" -x -p -f - || return 1
+    test_dir_is_writeable "$(dirname "${2}")" || return 1
+    if test_dir_exists "${2}"; then rm -rf "${2}" || return 1; fi
+    mkdir "${2}" || return 1
+    chmod 700 "${2}" || return 1
+    chown ${POSTGRES_OWNER}:${POSTGRES_GROUP} "${2}" || return 1
+    log "${SCRIPT_NAME}: Extracting basebackup to \"${2}\"..."
+    "${GZIP_BIN}" -d < "${1}" | "${TAR_BIN}" -C "${2}" -x -p -f - || return 1
 
     # Start postgres
-    "${5}" postgresql start
+    "${SERVICE_BIN}" ${POSTGRES_SERIVCE_NAME} start
     sleep 45
 
     log "${SCRIPT_NAME}: Import complete"
@@ -169,18 +177,19 @@ function do_import ()
 function do_export ()
 {
     # Get list of databases to dump (exclude postgres, template0 and template1)
-    DATABASES=$("${7}" -h localhost -U "${4}" -d postgres -q -A -t -c "SELECT datname FROM pg_database WHERE datname !='template0' AND datname !='template1' AND datname !='postgres'")
+    DATABASES=$("${PSQL_BIN}" -h "${3}" -p "${4}" -U "${5}" -d postgres -q -A -t -c "SELECT datname FROM pg_database WHERE datname !='template0' AND datname !='template1' AND datname !='postgres'")
 
     # Verify we have a valid list
     if ! test_var ${DATABASES}; then log true "${SCRIPT_NAME}: Error! No database(s) found. Aborting."; return 1; fi
 
     # Dump cluster roles
     log "${SCRIPT_NAME}: Dumping cluster roles to \"${1}/cluster-roles.sql\""
-    "${5}" -g --quote-all-identifiers --clean --if-exists -h "${2}" -p "${3}" -U "${4}" | sed -e '/^--/d' > "${1}/cluster-roles.sql"
+    "${PGDUMPALL_BIN}" -g --quote-all-identifiers --clean --if-exists -h "${3}" -p "${4}" -U "${5}" | sed -e '/^--/d' > "${1}/cluster-roles.sql"
     if [ $? -ne 0 -o ${PIPESTATUS[0]} -ne 0 ]; then log true "${SCRIPT_NAME}: Error! pg_dumpall or sed reported an error. Aborting."; return 1; fi
 
     chmod 600 "${1}/cluster-roles.sql"
 
+    # Dump databases
     NUM_DATABASES=${#DATABASES[@]}
     log "${SCRIPT_NAME}: Found ${NUM_DATABASES} database(s)"
 
@@ -191,22 +200,22 @@ function do_export ()
 
         chmod 700 "${1}/${DB}"
 
-        "${6}" -s --quote-all-identifiers --clean --if-exists -h "${2}" -p "${3}" -U "${4}" -d "${DB}" | sed -e '/^--/d' > "${1}/${DB}/db-schema.sql"
+        "${PGDUMP_BIN}" -s --quote-all-identifiers --clean --if-exists -h "${3}" -p "${4}" -U "${5}" -d "${DB}" | sed -e '/^--/d' > "${1}/${DB}/db-schema.sql"
         if [ $? -ne 0 -o ${PIPESTATUS[0]} -ne 0 ]; then log true "${SCRIPT_NAME}: Error! pg_dump or sed reported an error. Aborting."; return 1; fi
 
         chmod 600 "${1}/${DB}/db-schema.sql"
 
-        "${6}" --quote-all-identifiers --no-unlogged-table-data --data-only --encoding=UTF-8 -h "${2}" -p "${3}" -U "${4}" -d "${DB}" 2>/dev/null | sed -e '/^--/d' > "${1}/${DB}/db-data.sql"
+        "${PGDUMP_BIN}" --quote-all-identifiers --no-unlogged-table-data --data-only --encoding=UTF-8 -h "${3}" -p "${4}" -U "${5}" -d "${DB}" 2>/dev/null | sed -e '/^--/d' > "${1}/${DB}/db-data.sql"
         if [ $? -ne 0 -o ${PIPESTATUS[0]} -ne 0 ]; then log true "${SCRIPT_NAME}: Error! pg_dump or sed reported an error. Aborting."; return 1; fi
 
         chmod 600 "${1}/${DB}/db-data.sql"
     done
 
     # Tar and compress
-    "${8}" --exclude="export.tar.lzo" -cf - -C "${1}" . | "${9}" -5 > "${1}/export.tar.lzo"
+    "${TAR_BIN}" --exclude="${2}" -cf - -C "${1}" . | "${GZIP_BIN}" -q -${GZIP_COMPRESSION} > "${1}/${2}"
 
     # Check there were no errors
-    if [ $? -ne 0 -o ${PIPESTATUS[0]} -ne 0 ]; then log true "${SCRIPT_NAME}: Error! tar or lzop reported an error. Aborting."; return 1; fi
+    if [ $? -ne 0 -o ${PIPESTATUS[0]} -ne 0 ]; then log true "${SCRIPT_NAME}: Error! tar or gzip reported an error. Aborting."; return 1; fi
 
     return 0
 }
@@ -234,20 +243,23 @@ function do_conversion ()
     WORKSPACE="/tmp/.pgsql_export_wspace_${RANDOM}"
     create_workspace "${WORKSPACE}" || exit ${E_WORKSPACE}
 
-    # Import basebackup
-    do_import "${SOURCE_FILE}" "${14}" "${3}" "${15}" "${16}" || exit ${E_IMPORT}
+    # Set export file name (with or without ISO 8601 timestamp)
+    if [ ${9} = "true" ]; then EXPORT_FILE="${5}.$(date +%Y-%m-%dT%H-%M-%S).tar.gz"; else EXPORT_FILE="${5}.tar.gz"; fi
 
-    # Export raw sql as an lzop compressed tar archive
-    do_export "${WORKSPACE}" "${8}" "${9}" "${10}" "${11}" "${12}" "${13}" "${14}" "${15}" || exit ${E_DUMP}
+    # Import basebackup
+    do_import "${SOURCE_FILE}" "${3}" || exit ${E_IMPORT}
+
+    # Export raw sql as a gzip compressed tar archive
+    do_export "${WORKSPACE}" "${EXPORT_FILE}" "${10}" "${11}" "${12}" || exit ${E_DUMP}
 
     # Secure the export
-    chmod 600 "${WORKSPACE}/export.tar.lzo"
-    chown ${6} "${WORKSPACE}/export.tar.lzo" || exit ${E_PKG}
-    chgrp ${7} "${WORKSPACE}/export.tar.lzo" || exit ${E_PKG}
+    chmod ${8} "${WORKSPACE}/${EXPORT_FILE}" || exit ${E_PKG}
+    chown ${6} "${WORKSPACE}/${EXPORT_FILE}" || exit ${E_PKG}
+    chgrp ${7} "${WORKSPACE}/${EXPORT_FILE}" || exit ${E_PKG}
 
     # Move to destination
-    log "${SCRIPT_NAME}: Moving compressed export to '${4}/${5}'"
-    mv "${WORKSPACE}/export.tar.lzo" "${4}/${5}" || exit ${E_PKG}
+    log "${SCRIPT_NAME}: Moving compressed export to ${4}/${EXPORT_FILE}"
+    mv "${WORKSPACE}/${EXPORT_FILE}" "${4}/${EXPORT_FILE}" || exit ${E_PKG}
 
     # Remove temporary workspace
     rm -rf "${WORKSPACE}" || exit ${E_WORKSPACE}
@@ -261,7 +273,7 @@ function do_conversion ()
 # ////////////////////////////////////////////////////////////////////
 
 # Parse and verify command line options
-OPTSPEC=":hs:f:i:e:n:o:g:a:p:u:"
+OPTSPEC=":hs:f:i:e:n:o:g:m:t:a:p:u:"
 while getopts "${OPTSPEC}" OPT; do
     case ${OPT} in
         s)
@@ -277,13 +289,19 @@ while getopts "${OPTSPEC}" OPT; do
             EXPORT_DIR=$(echo "${OPTARG}" | sed -e "s/\/*$//")
             ;;
         n)
-            EXPORT_FILE="${OPTARG}" 
+            EXPORT_FILE_PREFIX="${OPTARG}" 
             ;;
         o)
             EXPORT_OWNER=${OPTARG}
             ;;
         g)
             EXPORT_GROUP=${OPTARG}
+            ;;
+        m)
+            EXPORT_FILE_MODE=${OPTARG}
+            ;;
+        t)
+            EXPORT_FILE_TIMESTAMP=${OPTARG} # Auto append ISO 8601 timestamp to backup file prefix
             ;;
         a)
             PGSQL_HOST=${OPTARG}
@@ -296,7 +314,7 @@ while getopts "${OPTSPEC}" OPT; do
             ;;
         h)
             echo ""
-            echo "Usage: ${SCRIPT_NAME} -s source_dir -f source_file_prefix -i import_dir -e export_dir -n export_file -o export_owner -g export_group -a intermediary_pgsql_host -p intermediary_pgsql_port -u intermediary_pgsql_super_user"
+            echo "Usage: ${SCRIPT_NAME} -s source_dir -f source_file_prefix -i import_dir -e export_dir -n export_file_prefix -o export_owner -g export_group -m export_file_mode -t [true|false] -a intermediary_pgsql_host -p intermediary_pgsql_port -u intermediary_pgsql_super_user"
             echo ""
             exit 0
             ;;
@@ -307,11 +325,11 @@ while getopts "${OPTSPEC}" OPT; do
     esac
 done
 
-# Check lzop is available
-if ! test_bin "${LZOP_BIN}"; then echo 'Could not find "lzop"' >&2; exit ${E_MISSING_DEPENDENCY}; fi
-
 # Check tar is available
 if ! test_bin "${TAR_BIN}"; then echo 'Could not find "tar"' >&2; exit ${E_MISSING_DEPENDENCY}; fi
+
+# Check gzip is available
+if ! test_bin "${GZIP_BIN}"; then echo 'Could not find "gzip"' >&2; exit ${E_MISSING_DEPENDENCY}; fi
 
 # Check service is available
 if ! test_bin "${SERVICE_BIN}"; then echo 'Could not find "service"' >&2; exit ${E_MISSING_DEPENDENCY}; fi
@@ -331,14 +349,16 @@ if ! test_var ${SOURCE_DIR}; then echo "${E_MSG}" >&2; exit ${E_MISSING_ARG}; fi
 if ! test_var ${SOURCE_FILE_PREFIX}; then echo "${E_MSG}" >&2; exit ${E_MISSING_ARG}; fi
 if ! test_var ${IMPORT_DIR}; then echo "${E_MSG}" >&2; exit ${E_MISSING_ARG}; fi
 if ! test_var ${EXPORT_DIR}; then echo "${E_MSG}" >&2; exit ${E_MISSING_ARG}; fi
-if ! test_var ${EXPORT_FILE}; then echo "${E_MSG}" >&2; exit ${E_MISSING_ARG}; fi
+if ! test_var ${EXPORT_FILE_PREFIX}; then echo "${E_MSG}" >&2; exit ${E_MISSING_ARG}; fi
 if ! test_var ${EXPORT_OWNER}; then echo "${E_MSG}" >&2; exit ${E_MISSING_ARG}; fi
 if ! test_var ${EXPORT_GROUP}; then echo "${E_MSG}" >&2; exit ${E_MISSING_ARG}; fi
+if ! test_var ${EXPORT_FILE_MODE}; then echo "${E_MSG}" >&2; exit ${E_MISSING_ARG}; fi
+if ! test_var ${EXPORT_FILE_TIMESTAMP}; then echo "${E_MSG}" >&2; exit ${E_MISSING_ARG}; fi
 if ! test_var ${PGSQL_HOST}; then echo "${E_MSG}" >&2; exit ${E_MISSING_ARG}; fi
 if ! test_var ${PGSQL_PORT}; then echo "${E_MSG}" >&2; exit ${E_MISSING_ARG}; fi
 if ! test_var ${PGSQL_USER}; then echo "${E_MSG}" >&2; exit ${E_MISSING_ARG}; fi
 
 # Perform conversion
-do_conversion "${SOURCE_DIR}" "${SOURCE_FILE_PREFIX}" "${IMPORT_DIR}" "${EXPORT_DIR}" "${EXPORT_FILE}" "${EXPORT_OWNER}" "${EXPORT_GROUP}" "${PGSQL_HOST}" "${PGSQL_PORT}" "${PGSQL_USER}" "${PGDUMPALL_BIN}" "${PGDUMP_BIN}" "${PSQL_BIN}" "${TAR_BIN}" "${LZOP_BIN}" "${SERVICE_BIN}"
+do_conversion "${SOURCE_DIR}" "${SOURCE_FILE_PREFIX}" "${IMPORT_DIR}" "${EXPORT_DIR}" "${EXPORT_FILE_PREFIX}" "${EXPORT_OWNER}" "${EXPORT_GROUP}" ${EXPORT_FILE_MODE} ${EXPORT_FILE_TIMESTAMP} "${PGSQL_HOST}" "${PGSQL_PORT}" "${PGSQL_USER}"
 
 exit 0
