@@ -99,29 +99,29 @@ function test_file_exists ()
 
 function do_housekeeping ()
 {
-	log "${SCRIPT_NAME}: Starting housekeeping..."
+    log "${SCRIPT_NAME}: Starting housekeeping..."
 
-	# Verify dir exists and is writeable
-	if ! test_dir_is_writeable "${1}"; then log true "${SCRIPT_NAME}: Error! Directory '${1}' does not exist (or is not writeable). Aborting."; exit ${E_DELETE}; fi
+    # Verify dir exists and is writeable
+    if ! test_dir_is_writeable "${1}"; then log true "${SCRIPT_NAME}: Error! Directory '${1}' does not exist (or is not writeable). Aborting."; exit ${E_DELETE}; fi
 
-	# Loop through files, deleting ones older than the threshold
-	UNIX_TIME_NOW=$(date +%s)
-	DELETED=0
-	for FILE in $(find "${1}" -maxdepth 1 -type f -name "${2}*" -printf '%f\n');
-	do
-		FILE_MTIME=$(stat --printf=%Y "${1}/${FILE}")
+    # Loop through files, deleting ones older than the threshold
+    UNIX_TIME_NOW=$(date +%s)
+    DELETED=0
+    for FILE in $(find "${1}" -maxdepth 1 -type f -name "${2}*" -printf '%f\n');
+    do
+        FILE_MTIME=$(stat --printf=%Y "${1}/${FILE}")
 
-		if [ $((${UNIX_TIME_NOW} - ${FILE_MTIME})) -gt $(((86400 * ${3})-1)) ]; then
-	        log "${SCRIPT_NAME}: Deleting '${FILE}' (file older than ${3} days)"
-			rm "${1}/${FILE}" || exit ${E_DELETE}
-			DELETED=1
-		fi
+        if [ $((${UNIX_TIME_NOW} - ${FILE_MTIME})) -gt $(((86400 * ${3})-1)) ]; then
+            log "${SCRIPT_NAME}: Deleting '${FILE}' (file older than ${3} days)"
+            rm "${1}/${FILE}" || exit ${E_DELETE}
+            DELETED=1
+        fi
 
-	done
+    done
 
-	if [ ${DELETED} -eq 0 ]; then
-		log "${SCRIPT_NAME}: No files older than ${3} day(s) found. Nothing deleted."
-	fi
+    if [ ${DELETED} -eq 0 ]; then
+        log "${SCRIPT_NAME}: No files older than ${3} day(s) found. Nothing deleted."
+    fi
 }
 
 
@@ -132,26 +132,26 @@ function do_housekeeping ()
 # Parse command line options
 OPTSPEC=":hd:p:a:"
 while getopts "${OPTSPEC}" OPT; do
-	case ${OPT} in
-		d)
-			SOURCE_DIR=$(echo "${OPTARG}" | sed -e "s/\/*$//")
-			;;
-		p)
-			FILE_PREFIX="${OPTARG}"
-			;;
-		a)
-			MAX_AGE=${OPTARG}
-			;;
-		h)
-			echo ""
-			echo "Usage: ${SCRIPT_NAME} -d source_dir -p file_prefix -a max_age_in_days"
-			echo ""
-			exit 0
-			;;
-		*)
-     		echo "Invalid option: -${OPTARG} (for usage instructions, execute this script again with just the -h flag)" >&2
-      		exit ${E_INVALID_OPT}
-      		;;
+    case ${OPT} in
+        d)
+            SOURCE_DIR=$(echo "${OPTARG}" | sed -e "s/\/*$//")
+            ;;
+        p)
+            FILE_PREFIX="${OPTARG}"
+            ;;
+        a)
+            MAX_AGE=${OPTARG}
+            ;;
+        h)
+            echo ""
+            echo "Usage: ${SCRIPT_NAME} -d source_dir -p file_prefix -a max_age_in_days"
+            echo ""
+            exit 0
+            ;;
+        *)
+            echo "Invalid option: -${OPTARG} (for usage instructions, execute this script again with just the -h flag)" >&2
+            exit ${E_INVALID_OPT}
+            ;;
     esac
 done
 
