@@ -38,6 +38,15 @@
 # ----| db-data.sql
 # ... etc
 #
+# Note 4:
+# Use the optional -x and -z flags to perform any pre-processing on the SQL data prior
+# to export. Passing -x mynewpassword will change the password for ALL user accounts/roles
+# (including the super user) to 'mynewpassword'. Use the -z flag to pass the absolute path
+# of a file containing SQL commands you wish to apply to table data before exporting (e.g.
+# altering senstivie user deetails like email addresses). Each line in the file should be
+# in the format: 'db_name:sql_command;' (without the single quotes). Example:
+# mydb:UPDATE users SET email = 'dummy@example.com';
+#
 
 # ////////////////////////////////////////////////////////////////////
 # ENV VARS AND ERROR CODES
@@ -173,40 +182,79 @@ function do_import ()
     return 0
 }
 
+function do_processing ()
+{
+    # Check if we should reset all passwords
+    if [ ! "${4}" = "!" ]; then
+        # Get list of cluster users
+        USERS=$("${PSQL_BIN}" -h "${1}" -p "${2}" -U "${3}" -d postgres -q -t -c '\du' | cut -f1 -d '|' | sed 's/\s//g' | sed '/^\s*$/d'; exit $(( $? + ${PIPESTATUS[0]} + ${PIPESTATUS[1]} + ${PIPESTATUS[2]} )))
+
+        # Check there were no errors
+        if [ $? -ne 0 ]; then return 1; fi
+
+        # Verify we have a valid list
+        if ! test_var ${USERS}; then log true "${SCRIPT_NAME}: Error! No users(s) found. Aborting."; return 1; fi
+
+        log "${SCRIPT_NAME}: Changing user passwords..."
+        for USER in ${USERS[@]}; do
+            "${PSQL_BIN}" -h "${1}" -p "${2}" -U "${3}" -d postgres -q -c "ALTER USER ${USER} WITH ENCRYPTED PASSWORD '${4}';" || return 1
+            "${PSQL_BIN}" -h "${1}" -p "${2}" -U "${3}" -d postgres -q -c "ALTER USER ${USER} VALID UNTIL 'infinity';" || return 1
+        done
+    fi
+
+    # Check if we should perform some transformations on table data
+    if [ ! "${5}" = "!" ]; then
+        if ! test_file_exists "${5}"; then log true "${SCRIPT_NAME}: Error! Command file '${5}' not found. Aborting."; return 1; fi
+
+        # Iterate over lines in command file and apply basic transformations to table data
+        # Expected format of each line: 'db_name:sql_command;' (without the single quotes). Example:
+        # mydb:UPDATE users SET email = 'dummy@example.com';
+        log "${SCRIPT_NAME}: Applying transformations to table data..."
+        while IFS=: read -r DB CMD; do
+            "${PSQL_BIN}" -h "${1}" -p "${2}" -U "${3}" -d ${DB} -q -c "${CMD}" || return 1
+        done < "${5}"
+    fi
+
+    return 0
+}
 
 function do_export ()
 {
-    # Get list of databases to dump (exclude postgres, template0 and template1)
-    DATABASES=$("${PSQL_BIN}" -h "${3}" -p "${4}" -U "${5}" -d postgres -q -A -t -c "SELECT datname FROM pg_database WHERE datname !='template0' AND datname !='template1' AND datname !='postgres'")
-
-    # Verify we have a valid list
-    if ! test_var ${DATABASES}; then log true "${SCRIPT_NAME}: Error! No database(s) found. Aborting."; return 1; fi
+    # Perform any pre-processing before exporting
+    if ! do_processing "${3}" "${4}" "${5}" "${6}" "${7}"; then return 1; fi
 
     # Dump cluster roles
     log "${SCRIPT_NAME}: Dumping cluster roles to \"${1}/cluster-roles.sql\""
     "${PGDUMPALL_BIN}" -g --quote-all-identifiers --clean --if-exists -h "${3}" -p "${4}" -U "${5}" | sed -e '/^--/d' > "${1}/cluster-roles.sql"
     if [ $? -ne 0 -o ${PIPESTATUS[0]} -ne 0 ]; then log true "${SCRIPT_NAME}: Error! pg_dumpall or sed reported an error. Aborting."; return 1; fi
 
-    chmod 600 "${1}/cluster-roles.sql"
+    chmod 600 "${1}/cluster-roles.sql" || return 1
+
+    # Get list of databases to dump (exclude postgres, template0 and template1)
+    DATABASES=$("${PSQL_BIN}" -h "${3}" -p "${4}" -U "${5}" -d postgres -q -A -t -c "SELECT datname FROM pg_database WHERE datname !='template0' AND datname !='template1' AND datname !='postgres'")
+
+    # Check there were no errors
+    if [ $? -ne 0 ]; then return 1; fi
+
+    # Verify we have a valid list
+    if ! test_var ${DATABASES}; then log true "${SCRIPT_NAME}: Error! No database(s) found. Aborting."; return 1; fi
 
     # Dump databases
     NUM_DATABASES=${#DATABASES[@]}
-    log "${SCRIPT_NAME}: Found ${NUM_DATABASES} database(s)"
-
     for DB in ${DATABASES[@]}; do
-        log "${SCRIPT_NAME}: Dumping database \"${DB}\" to \"${1}/${DB}\"..."
+        log "${SCRIPT_NAME}: Dumping database ${DB} to ${1}/${DB}..."
 
         mkdir "${1}/${DB}" || return 1
 
-        chmod 700 "${1}/${DB}"
+        chmod 700 "${1}/${DB}" || return 1
 
         "${PGDUMP_BIN}" -s --quote-all-identifiers --clean --if-exists -h "${3}" -p "${4}" -U "${5}" -d "${DB}" | sed -e '/^--/d' > "${1}/${DB}/db-schema.sql"
-        if [ $? -ne 0 -o ${PIPESTATUS[0]} -ne 0 ]; then log true "${SCRIPT_NAME}: Error! pg_dump or sed reported an error. Aborting."; return 1; fi
+        if [ $? -ne 0 -o ${PIPESTATUS[0]} -ne 0 ]; then return 1; fi
 
         chmod 600 "${1}/${DB}/db-schema.sql"
 
         "${PGDUMP_BIN}" --quote-all-identifiers --no-unlogged-table-data --data-only --encoding=UTF-8 -h "${3}" -p "${4}" -U "${5}" -d "${DB}" 2>/dev/null | sed -e '/^--/d' > "${1}/${DB}/db-data.sql"
-        if [ $? -ne 0 -o ${PIPESTATUS[0]} -ne 0 ]; then log true "${SCRIPT_NAME}: Error! pg_dump or sed reported an error. Aborting."; return 1; fi
+        if [ $? -ne 0 -o ${PIPESTATUS[0]} -ne 0 ]; then return 1; fi
 
         chmod 600 "${1}/${DB}/db-data.sql"
     done
@@ -215,7 +263,7 @@ function do_export ()
     "${TAR_BIN}" --exclude="${2}" -cf - -C "${1}" . | "${GZIP_BIN}" -q -${GZIP_COMPRESSION} > "${1}/${2}"
 
     # Check there were no errors
-    if [ $? -ne 0 -o ${PIPESTATUS[0]} -ne 0 ]; then log true "${SCRIPT_NAME}: Error! tar or gzip reported an error. Aborting."; return 1; fi
+    if [ $? -ne 0 -o ${PIPESTATUS[0]} -ne 0 ]; then return 1; fi
 
     return 0
 }
@@ -250,7 +298,7 @@ function do_conversion ()
     do_import "${SOURCE_FILE}" "${3}" || exit ${E_IMPORT}
 
     # Export raw sql as a gzip compressed tar archive
-    do_export "${WORKSPACE}" "${EXPORT_FILE}" "${10}" "${11}" "${12}" || exit ${E_DUMP}
+    do_export "${WORKSPACE}" "${EXPORT_FILE}" "${10}" "${11}" "${12}" "${13}" "${14}" || exit ${E_DUMP}
 
     # Secure the export
     chmod ${8} "${WORKSPACE}/${EXPORT_FILE}" || exit ${E_PKG}
@@ -273,7 +321,7 @@ function do_conversion ()
 # ////////////////////////////////////////////////////////////////////
 
 # Parse and verify command line options
-OPTSPEC=":hs:f:i:e:n:o:g:m:t:a:p:u:"
+OPTSPEC=":hs:f:i:e:n:o:g:m:t:a:p:u:x:z:"
 while getopts "${OPTSPEC}" OPT; do
     case ${OPT} in
         s)
@@ -289,7 +337,7 @@ while getopts "${OPTSPEC}" OPT; do
             EXPORT_DIR=$(echo "${OPTARG}" | sed -e "s/\/*$//")
             ;;
         n)
-            EXPORT_FILE_PREFIX="${OPTARG}" 
+            EXPORT_FILE_PREFIX="${OPTARG}"
             ;;
         o)
             EXPORT_OWNER=${OPTARG}
@@ -312,9 +360,15 @@ while getopts "${OPTSPEC}" OPT; do
         u)
             PGSQL_USER=${OPTARG}
             ;;
+        x)
+            NEW_PASSWORD="${OPTARG}"
+            ;;
+        z)
+            PRE_PROCESS_CMD_FILE="${OPTARG}"
+            ;;
         h)
             echo ""
-            echo "Usage: ${SCRIPT_NAME} -s source_dir -f source_file_prefix -i import_dir -e export_dir -n export_file_prefix -o export_owner -g export_group -m export_file_mode -t [true|false] -a intermediary_pgsql_host -p intermediary_pgsql_port -u intermediary_pgsql_super_user"
+            echo "Usage: ${SCRIPT_NAME} -s source_dir -f source_file_prefix -i import_dir -e export_dir -n export_file_prefix -o export_owner -g export_group -m export_file_mode -t [true|false] -a intermediary_pgsql_host -p intermediary_pgsql_port -u intermediary_pgsql_super_user [-x new_password] [-z path_to_pre_process_cmd_file]"
             echo ""
             exit 0
             ;;
@@ -358,7 +412,13 @@ if ! test_var ${PGSQL_HOST}; then echo "${E_MSG}" >&2; exit ${E_MISSING_ARG}; fi
 if ! test_var ${PGSQL_PORT}; then echo "${E_MSG}" >&2; exit ${E_MISSING_ARG}; fi
 if ! test_var ${PGSQL_USER}; then echo "${E_MSG}" >&2; exit ${E_MISSING_ARG}; fi
 
+# Check if we should reset ALL user account passwords
+if ! test_var ${NEW_PASSWORD}; then NEW_PASSWORD="!"; fi
+
+# Check if we should apply any pre processing/sanitising commands prior to exporting (e.g. to remove senstivie user info like email addresses)
+if ! test_var ${PRE_PROCESS_CMD_FILE}; then PRE_PROCESS_CMD_FILE="!"; fi
+
 # Perform conversion
-do_conversion "${SOURCE_DIR}" "${SOURCE_FILE_PREFIX}" "${IMPORT_DIR}" "${EXPORT_DIR}" "${EXPORT_FILE_PREFIX}" "${EXPORT_OWNER}" "${EXPORT_GROUP}" ${EXPORT_FILE_MODE} ${EXPORT_FILE_TIMESTAMP} "${PGSQL_HOST}" "${PGSQL_PORT}" "${PGSQL_USER}"
+do_conversion "${SOURCE_DIR}" "${SOURCE_FILE_PREFIX}" "${IMPORT_DIR}" "${EXPORT_DIR}" "${EXPORT_FILE_PREFIX}" "${EXPORT_OWNER}" "${EXPORT_GROUP}" ${EXPORT_FILE_MODE} ${EXPORT_FILE_TIMESTAMP} "${PGSQL_HOST}" "${PGSQL_PORT}" "${PGSQL_USER}" "${NEW_PASSWORD}" "${PRE_PROCESS_CMD_FILE}"
 
 exit 0
