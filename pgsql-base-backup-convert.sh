@@ -29,13 +29,13 @@
 # are always ignored by this script):
 #
 # - export.tar.gz
-# --| cluster-roles.sql
+# --| roles.sql
 # --| dbname1
-# ----| db-schema.sql
-# ----| db-data.sql
+# ----| schema.sql
+# ----| data.sql
 # --| dbname2
-# ----| db-schema.sql
-# ----| db-data.sql
+# ----| schema.sql
+# ----| data.sql
 # ... etc
 #
 # Note 4:
@@ -224,11 +224,11 @@ function do_export ()
     if ! do_processing "${3}" "${4}" "${5}" "${6}" "${7}"; then return 1; fi
 
     # Dump cluster roles
-    log "${SCRIPT_NAME}: Dumping cluster roles to \"${1}/cluster-roles.sql\""
-    "${PGDUMPALL_BIN}" -g --quote-all-identifiers --clean --if-exists -h "${3}" -p "${4}" -U "${5}" | sed -e '/^--/d' > "${1}/cluster-roles.sql"
+    log "${SCRIPT_NAME}: Dumping cluster roles..."
+    "${PGDUMPALL_BIN}" -g --quote-all-identifiers --clean --if-exists -h "${3}" -p "${4}" -U "${5}" | sed -e '/^--/d' > "${1}/roles.sql"
     if [ $? -ne 0 -o ${PIPESTATUS[0]} -ne 0 ]; then log true "${SCRIPT_NAME}: Error! pg_dumpall or sed reported an error. Aborting."; return 1; fi
 
-    chmod 600 "${1}/cluster-roles.sql" || return 1
+    chmod 600 "${1}/roles.sql" || return 1
 
     # Get list of databases to dump (exclude postgres, template0 and template1)
     DATABASES=$("${PSQL_BIN}" -h "${3}" -p "${4}" -U "${5}" -d postgres -q -A -t -c "SELECT datname FROM pg_database WHERE datname !='template0' AND datname !='template1' AND datname !='postgres'")
@@ -242,21 +242,21 @@ function do_export ()
     # Dump databases
     NUM_DATABASES=${#DATABASES[@]}
     for DB in ${DATABASES[@]}; do
-        log "${SCRIPT_NAME}: Dumping database ${DB} to ${1}/${DB}..."
+        log "${SCRIPT_NAME}: Dumping database '${DB}'..."
 
         mkdir "${1}/${DB}" || return 1
 
         chmod 700 "${1}/${DB}" || return 1
 
-        "${PGDUMP_BIN}" -s --quote-all-identifiers --clean --if-exists -h "${3}" -p "${4}" -U "${5}" -d "${DB}" | sed -e '/^--/d' > "${1}/${DB}/db-schema.sql"
+        "${PGDUMP_BIN}" -s --quote-all-identifiers --clean --if-exists -h "${3}" -p "${4}" -U "${5}" -d "${DB}" | sed -e '/^--/d' > "${1}/${DB}/schema.sql"
         if [ $? -ne 0 -o ${PIPESTATUS[0]} -ne 0 ]; then return 1; fi
 
-        chmod 600 "${1}/${DB}/db-schema.sql"
+        chmod 600 "${1}/${DB}/schema.sql"
 
-        "${PGDUMP_BIN}" --quote-all-identifiers --no-unlogged-table-data --data-only --encoding=UTF-8 -h "${3}" -p "${4}" -U "${5}" -d "${DB}" 2>/dev/null | sed -e '/^--/d' > "${1}/${DB}/db-data.sql"
+        "${PGDUMP_BIN}" --quote-all-identifiers --no-unlogged-table-data --data-only --encoding=UTF-8 -h "${3}" -p "${4}" -U "${5}" -d "${DB}" 2>/dev/null | sed -e '/^--/d' > "${1}/${DB}/data.sql"
         if [ $? -ne 0 -o ${PIPESTATUS[0]} -ne 0 ]; then return 1; fi
 
-        chmod 600 "${1}/${DB}/db-data.sql"
+        chmod 600 "${1}/${DB}/data.sql"
     done
 
     # Tar and compress
