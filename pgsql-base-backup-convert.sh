@@ -229,7 +229,7 @@ function do_export ()
     # Dump cluster roles
     log "${SCRIPT_NAME}: Dumping cluster roles..."
     "${PGDUMPALL_BIN}" -g --quote-all-identifiers --clean --if-exists -h "${3}" -p "${4}" -U "${5}" | sed -e '/^--/d' > "${1}/roles.sql"
-    if [ $? -ne 0 -o ${PIPESTATUS[0]} -ne 0 ]; then log true "${SCRIPT_NAME}: Error! pg_dumpall or sed reported an error. Aborting."; return 1; fi
+    if [ $? -ne 0 -o ${PIPESTATUS[0]} -ne 0 ]; then return 1; fi
 
     chmod 600 "${1}/roles.sql" || return 1
 
