@@ -1,7 +1,8 @@
 #!/bin/bash
 #
-# Imports a basebackup of a master PostgreSQL server to an intermediary server and
-# re-exports as a gzip compressed tar archive of raw sql files (produced with pg_dump).
+# Imports a backup of a master postgresql server (produced with pg_basebackup) to an
+# intermediary server and re-exports it as a gzip compressed tar archive of raw sql
+# files (produced with pg_dumpall and pg_dump).
 #
 # Execute with -h flag to see required script params.
 #
@@ -9,12 +10,12 @@
 # Why ?
 #
 # Backups produced with pg_basebackup give an opaque (and large) database snapshot.
-# Re-exporting with pg_dump lets you seperate role, schema and table data in to discrete
-# SQL files that can be more easily moved around (they compress well) and imported
-# to systems other than PostgresSQL.
+# Re-exporting with pg_dumpall/pg_dump allows the seperation of role, schema and table
+# data in to discrete SQL files that can be more easily moved around (they compress well),
+# sanitised and imported to systems other than postgresql.
 #
-# Script has to import and export through an intermediary postgesql server because pg_dump
-# cannot (yet) work directly with pg_basebackup snapshots.
+# This script has to import and export through an intermediary postgesql server because
+# pg_dumpall and pg_dump cannot (yet) work directly with pg_basebackup snapshots.
 #
 # Note 1:
 # Source file is expected to be a gzip compressed tar archive produced with pg_basebackup
@@ -39,12 +40,12 @@
 # ... etc
 #
 # Note 4:
-# Use the optional -x and -z flags to perform any pre-processing on the SQL data prior
-# to export. Passing -x mynewpassword will change the password for ALL user accounts/roles
-# (including the super user) to 'mynewpassword'. Use the -z flag to pass the absolute path
-# of a file containing SQL commands you wish to apply to table data before exporting (e.g.
-# altering senstivie user deetails like email addresses). Each line in the file should be
-# in the format: 'db_name:sql_command;' (without the single quotes). Example:
+# Use the optional -x and -z flags to perform santising on the SQL data prior to export.
+# Passing -x mynewpassword will change the password for ALL user accounts/roles (including
+# the super user) to 'mynewpassword'. Use the -z flag to pass the absolute path of a file
+# containing SQL commands you wish to apply to table data before exporting (e.g. altering 
+# senstivie user details like email addresses). Each line in the file should be in the
+# format: 'db_name:sql_command;' (without the single quotes). Example line:
 # mydb:UPDATE users SET email = 'dummy@example.com';
 #
 
@@ -81,6 +82,7 @@ PGDUMPALL_BIN="$(which pg_dumpall)"
 PSQL_BIN="$(which psql)"
 
 GZIP_COMPRESSION=4
+WORKSPACE_PATH_PREFIX="/tmp/.pgsql_convert_wspace_"
 POSTGRES_SERIVCE_NAME="postgresql"
 POSTGRES_OWNER="postgres"
 POSTGRES_GROUP="postgres"
@@ -153,7 +155,7 @@ function test_file_exists ()
 function create_workspace ()
 {
     mkdir "${1}" || return 1
-    chmod 700 "${1}"
+    chmod 700 "${1}" || return 1
 
     return 0
 }
@@ -171,7 +173,8 @@ function do_import ()
     chmod 700 "${2}" || return 1
     chown ${POSTGRES_OWNER}:${POSTGRES_GROUP} "${2}" || return 1
     log "${SCRIPT_NAME}: Extracting basebackup to \"${2}\"..."
-    "${GZIP_BIN}" -d < "${1}" | "${TAR_BIN}" -C "${2}" -x -p -f - || return 1
+    "${GZIP_BIN}" -d < "${1}" | "${TAR_BIN}" -C "${2}" -x -p -f -
+    if [ $? -ne 0 -o ${PIPESTATUS[0]} -ne 0 ]; then return 1; fi
 
     # Start postgres
     "${SERVICE_BIN}" ${POSTGRES_SERIVCE_NAME} start
@@ -260,6 +263,7 @@ function do_export ()
     done
 
     # Tar and compress
+    touch "${1}/${2}" || return 1
     "${TAR_BIN}" --exclude="${2}" -cf - -C "${1}" . | "${GZIP_BIN}" -q -${GZIP_COMPRESSION} > "${1}/${2}"
 
     # Check there were no errors
@@ -288,7 +292,7 @@ function do_conversion ()
     if ! test_dir_is_writeable "${4}"; then log true "${SCRIPT_NAME}: Error! Export directory '${4}' does not exist (or is not writeable). Aborting."; exit ${E_EXPORT}; fi
 
     # Create temporary workspace
-    WORKSPACE="/tmp/.pgsql_export_wspace_${RANDOM}"
+    WORKSPACE="${WORKSPACE_PATH_PREFIX}$(od -N 8 -t uL -An /dev/urandom | sed 's/\s//g')"
     create_workspace "${WORKSPACE}" || exit ${E_WORKSPACE}
 
     # Set export file name (with or without ISO 8601 timestamp)
@@ -301,12 +305,12 @@ function do_conversion ()
     do_export "${WORKSPACE}" "${EXPORT_FILE}" "${10}" "${11}" "${12}" "${13}" "${14}" || exit ${E_DUMP}
 
     # Secure the export
-    chmod ${8} "${WORKSPACE}/${EXPORT_FILE}" || exit ${E_PKG}
     chown ${6} "${WORKSPACE}/${EXPORT_FILE}" || exit ${E_PKG}
     chgrp ${7} "${WORKSPACE}/${EXPORT_FILE}" || exit ${E_PKG}
+    chmod ${8} "${WORKSPACE}/${EXPORT_FILE}" || exit ${E_PKG}
 
     # Move to destination
-    log "${SCRIPT_NAME}: Moving compressed export to ${4}/${EXPORT_FILE}"
+    log "${SCRIPT_NAME}: Moving compressed export to '${4}/${EXPORT_FILE}'"
     mv "${WORKSPACE}/${EXPORT_FILE}" "${4}/${EXPORT_FILE}" || exit ${E_PKG}
 
     # Remove temporary workspace
@@ -349,7 +353,7 @@ while getopts "${OPTSPEC}" OPT; do
             EXPORT_FILE_MODE=${OPTARG}
             ;;
         t)
-            EXPORT_FILE_TIMESTAMP=${OPTARG} # Auto append ISO 8601 timestamp to backup file prefix
+            EXPORT_FILE_TIMESTAMP=${OPTARG} # If 'true', ISO 8601 timestamp will be auto-appended to export_file_prefix
             ;;
         a)
             PGSQL_HOST=${OPTARG}
@@ -368,7 +372,7 @@ while getopts "${OPTSPEC}" OPT; do
             ;;
         h)
             echo ""
-            echo "Usage: ${SCRIPT_NAME} -s source_dir -f source_file_prefix -i import_dir -e export_dir -n export_file_prefix -o export_owner -g export_group -m export_file_mode -t [true|false] -a intermediary_pgsql_host -p intermediary_pgsql_port -u intermediary_pgsql_super_user [-x new_password] [-z path_to_pre_process_cmd_file]"
+            echo "Usage: ${SCRIPT_NAME} -s source_dir -f source_file_prefix -i import_dir -e export_dir -n export_file_prefix -o export_owner -g export_group -m export_file_mode -t true|false -a intermediary_pgsql_host -p intermediary_pgsql_port -u intermediary_pgsql_super_user [-x new_password] [-z path_to_pre_process_cmd_file]"
             echo ""
             exit 0
             ;;

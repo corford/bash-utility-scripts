@@ -3,6 +3,8 @@
 # Wrapper script to take a Redis backup and store a GPG encrypted
 # copy remotely.
 #
+# Execute with -h flag to see required script params.
+#
 
 # ////////////////////////////////////////////////////////////////////
 # ENV VARS AND ERROR CODES
@@ -147,7 +149,7 @@ while getopts "${OPTSPEC}" OPT; do
             ;;
         h)
             echo ""
-            echo "Usage: ${SCRIPT_NAME} -a backup_script -d backup_dir -f backup_file_prefix -o backup_file_owner -g backup_file_group -m backup_file_mode -t [true|false] -r redis_host -p redis_port -b secure_drop_script -k gpg_key_id -x remote_sftp_host -y remote_sftp_user -z remote_sftp_path -j remote_file_mode"
+            echo "Usage: ${SCRIPT_NAME} -a backup_script -d backup_dir -f backup_file_prefix -o backup_file_owner -g backup_file_group -m backup_file_mode -t true|false -r redis_host -p redis_port -b secure_drop_script -k gpg_key_id -x remote_sftp_host -y remote_sftp_user -z remote_sftp_path -j remote_file_mode"
             echo ""
             exit 0
             ;;

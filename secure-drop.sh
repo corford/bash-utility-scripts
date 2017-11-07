@@ -38,6 +38,7 @@ E_TRANSFER=7
 
 SFTP_BIN="$(which sftp)"
 GPG_BIN="$(which gpg)"
+WORKSPACE_PATH_PREFIX="/tmp/.secure_drop_wspace_"
 
 
 # ////////////////////////////////////////////////////////////////////
@@ -107,7 +108,7 @@ function test_file_exists ()
 function create_workspace ()
 {
     mkdir "${1}" || return 1
-    chmod 700 "${1}"
+    chmod 700 "${1}" || return 1
 
     return 0
 }
@@ -120,7 +121,7 @@ function do_drop ()
     if ! test_file_exists "${1}"; then log true "${SCRIPT_NAME}: Error! Source file '${1}' does not exist (or is not readable). Aborting."; exit ${E_SOURCE}; fi
 
     # Create temporary workspace
-    WORKSPACE="/tmp/.secure_drop_wspace_${RANDOM}"
+    WORKSPACE="${WORKSPACE_PATH_PREFIX}$(od -N 8 -t uL -An /dev/urandom | sed 's/\s//g')"
     create_workspace "${WORKSPACE}" || exit ${E_WORKSPACE}
 
     # Set remote filename as source file with ".gpg" appended

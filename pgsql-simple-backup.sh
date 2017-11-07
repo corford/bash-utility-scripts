@@ -1,13 +1,26 @@
 #!/bin/bash
 #
-# Takes a base backup of a running pgsql cluster and stores it in a
-# gzip compressed tar archive.
+# Takes a backup of a postgresql cluster's roles, db schemas and, optionally,
+# table data.
 #
 # Execute with -h flag to see required script params.
 #
-# Note: a Postgresql .pgpass file (placed in the home dir of the user
-# running the script) is required. It should contain replication
-# credentials for the pgsql cluser being backed up with pg_basebackup.
+# Note 1: connection credentials will be taken from a postgresql .pgpass file
+# if one is present in the home dir of the user running this script.
+#
+# Note 2:
+# Resulting backup archive layout (template0, template1 and postgres databases
+# are always ignored by this script):
+#
+# - backup.tar.gz
+# --| roles.sql
+# --| dbname1
+# ----| schema.sql
+# ----| data.sql [ if `-a true` is passed to this script ]
+# --| dbname2
+# ----| schema.sql
+# ----| data.sql [ if `-a true` is passed to this script ]
+# ... etc
 #
 
 # ////////////////////////////////////////////////////////////////////
@@ -34,9 +47,11 @@ E_PKG=6
 
 TAR_BIN="$(which tar)"
 GZIP_BIN="$(which gzip)"
-PGBASEBACKUP_BIN="$(which pg_basebackup)"
+PGDUMP_BIN="$(which pg_dump)"
+PGDUMPALL_BIN="$(which pg_dumpall)"
+PSQL_BIN="$(which psql)"
 GZIP_COMPRESSION=4
-WORKSPACE_PATH_PREFIX="/tmp/.pgsql_basebackup_wspace_"
+WORKSPACE_PATH_PREFIX="/tmp/.pgsql_simplebackup_wspace_"
 
 
 # ////////////////////////////////////////////////////////////////////
@@ -124,14 +139,56 @@ function do_backup ()
     WORKSPACE="${WORKSPACE_PATH_PREFIX}$(od -N 8 -t uL -An /dev/urandom | sed 's/\s//g')"
     create_tmp_workspace "${WORKSPACE}" || exit ${E_WORKSPACE}
 
+    # Dump cluster roles
+    log "${SCRIPT_NAME}: Dumping cluster roles"
+    "${PGDUMPALL_BIN}" -g --quote-all-identifiers --clean --if-exists -h "${7}" -p "${8}" -U "${9}" | sed -e '/^--/d' > "${WORKSPACE}/roles.sql"
+    if [ $? -ne 0 -o ${PIPESTATUS[0]} -ne 0 ]; then exit ${E_BACKUP}; fi
+
+    chmod 600 "${WORKSPACE}/roles.sql" || exit ${E_BACKUP}
+
+    # Get list of databases (exclude postgres, template0 and template1)
+    DATABASES=$("${PSQL_BIN}" -h "${7}" -p "${8}" -U "${9}" -d postgres -q -A -t -c "SELECT datname FROM pg_database WHERE datname !='template0' AND datname !='template1' AND datname !='postgres'")
+
+    # Check there were no errors
+    if [ $? -ne 0 ]; then exit ${E_BACKUP}; fi
+
+    # Verify we have a valid list
+    if ! test_var ${DATABASES}; then log true "${SCRIPT_NAME}: Error! No database(s) found. Aborting."; exit ${E_BACKUP}; fi
+
+    # Dump schemas and table data
+    NUM_DATABASES=${#DATABASES[@]}
+    for DB in ${DATABASES[@]}; do
+        mkdir "${WORKSPACE}/${DB}" || exit ${E_BACKUP}
+
+        chmod 700 "${WORKSPACE}/${DB}" || exit ${E_BACKUP}
+
+        log "${SCRIPT_NAME}: Dumping '${DB}' schema"
+        "${PGDUMP_BIN}" -s --quote-all-identifiers --clean --if-exists -h "${7}" -p "${8}" -U "${9}" -d "${DB}" | sed -e '/^--/d' > "${WORKSPACE}/${DB}/schema.sql"
+
+        if [ $? -ne 0 -o ${PIPESTATUS[0]} -ne 0 ]; then exit ${E_BACKUP}; fi
+
+        chmod 600 "${WORKSPACE}/${DB}/schema.sql"
+
+        # Check if table data should be included in the backup
+        if [ ${10} = "true" ]; then
+            log "${SCRIPT_NAME}: Dumping '${DB}' tables"
+            "${PGDUMP_BIN}" --quote-all-identifiers --no-unlogged-table-data --data-only --encoding=UTF-8 -h "${7}" -p "${8}" -U "${9}" -d "${DB}" 2>/dev/null | sed -e '/^--/d' > "${WORKSPACE}/${DB}/data.sql"
+
+            if [ $? -ne 0 -o ${PIPESTATUS[0]} -ne 0 ]; then return 1; fi
+
+            chmod 600 "${WORKSPACE}/${DB}/data.sql"
+        fi
+    done
+
     # Set backup file name (with or without ISO 8601 timestamp)
     if [ ${6} = "true" ]; then BACKUP_FILE="${2}.$(date +%Y-%m-%dT%H-%M-%S).tar.gz"; else BACKUP_FILE="${2}.tar.gz"; fi
 
-    # Take postgres base backup and compress resulting tar archive with gzip
-    "${PGBASEBACKUP_BIN}" -U "${9}" -h ${7} -p ${8} -w -c fast -X fetch -D - -Ft | "${GZIP_BIN}" -q -${GZIP_COMPRESSION} > "${WORKSPACE}/${BACKUP_FILE}"
+    # Tar and compress
+    touch "${WORKSPACE}/${BACKUP_FILE}" || exit ${E_PKG}
+    "${TAR_BIN}" --exclude="${BACKUP_FILE}" -cf - -C "${WORKSPACE}" . | "${GZIP_BIN}" -q -${GZIP_COMPRESSION} > "${WORKSPACE}/${BACKUP_FILE}"
 
     # Check there were no errors
-    if [ $? -ne 0 -o ${PIPESTATUS[0]} -ne 0 ]; then log true "${SCRIPT_NAME}: Error! pg_basebackup or gzip reported an error. Aborting."; exit ${E_BACKUP}; fi
+    if [ $? -ne 0 -o ${PIPESTATUS[0]} -ne 0 ]; then exit ${E_PKG}; fi
 
     # Secure the backup
     chown ${3} "${WORKSPACE}/${BACKUP_FILE}" || exit ${E_PKG}
@@ -154,7 +211,7 @@ function do_backup ()
 # ////////////////////////////////////////////////////////////////////
 
 # Parse and verify command line options
-OPTSPEC=":hd:f:o:g:m:t:r:p:u:"
+OPTSPEC=":hd:f:o:g:m:t:r:p:u:a:"
 while getopts "${OPTSPEC}" OPT; do
     case ${OPT} in
         d)
@@ -184,9 +241,12 @@ while getopts "${OPTSPEC}" OPT; do
         u)
             PGSQL_USER=${OPTARG}
             ;;
+        a)
+            INCLUDE_TABLE_DATA=${OPTARG} # If true, dumped table data for each database will be included in the backup
+            ;;
         h)
             echo ""
-            echo "Usage: ${SCRIPT_NAME} -d backup_dir -f backup_file_prefix -o backup_file_owner -g backup_file_group -m backup_file_mode -t true|false -r pgsql_host -p pgsql_port -u pgsql_user"
+            echo "Usage: ${SCRIPT_NAME} -d backup_dir -f backup_file_prefix -o backup_file_owner -g backup_file_group -m backup_file_mode -t true|false -r pgsql_host -p pgsql_port -u pgsql_user -a true|false"
             echo ""
             exit 0
             ;;
@@ -203,8 +263,14 @@ if ! test_bin "${TAR_BIN}"; then echo 'Could not find "tar"' >&2; exit ${E_MISSI
 # Check gzip is available
 if ! test_bin "${GZIP_BIN}"; then echo 'Could not find "gzip"' >&2; exit ${E_MISSING_DEPENDENCY}; fi
 
-# Check pg_basebackup is available
-if ! test_bin "${PGBASEBACKUP_BIN}"; then echo 'Could not find "pg_basebackup"' >&2; exit ${E_MISSING_DEPENDENCY}; fi
+# Check pg_dump is available
+if ! test_bin "${PGDUMP_BIN}"; then echo 'Could not find "pg_dump"' >&2; exit ${E_MISSING_DEPENDENCY}; fi
+
+# Check pg_dumpall is available
+if ! test_bin "${PGDUMPALL_BIN}"; then echo 'Could not find "pg_dumpall"' >&2; exit ${E_MISSING_DEPENDENCY}; fi
+
+# Check psql is available
+if ! test_bin "${PSQL_BIN}"; then echo 'Could not find "psql"' >&2; exit ${E_MISSING_DEPENDENCY}; fi
 
 # Check required script arguments are present
 E_MSG="Missing or invalid script argument(s). For usage instructions, execute this script again with just the -h flag."
@@ -217,7 +283,8 @@ if ! test_var ${BACKUP_FILE_TIMESTAMP}; then echo "${E_MSG}" >&2; exit ${E_MISSI
 if ! test_var ${PGSQL_HOST}; then echo "${E_MSG}" >&2; exit ${E_MISSING_ARG}; fi
 if ! test_var ${PGSQL_PORT}; then echo "${E_MSG}" >&2; exit ${E_MISSING_ARG}; fi
 if ! test_var ${PGSQL_USER}; then echo "${E_MSG}" >&2; exit ${E_MISSING_ARG}; fi
+if ! test_var ${INCLUDE_TABLE_DATA}; then echo "${E_MSG}" >&2; exit ${E_MISSING_ARG}; fi
 
-do_backup "${BACKUP_DIR}" "${BACKUP_FILE_PREFIX}" "${BACKUP_FILE_OWNER}" "${BACKUP_FILE_GROUP}" ${BACKUP_FILE_MODE} ${BACKUP_FILE_TIMESTAMP} "${PGSQL_HOST}" "${PGSQL_PORT}" "${PGSQL_USER}"
+do_backup "${BACKUP_DIR}" "${BACKUP_FILE_PREFIX}" "${BACKUP_FILE_OWNER}" "${BACKUP_FILE_GROUP}" ${BACKUP_FILE_MODE} ${BACKUP_FILE_TIMESTAMP} "${PGSQL_HOST}" "${PGSQL_PORT}" "${PGSQL_USER}" ${INCLUDE_TABLE_DATA}
 
 exit 0

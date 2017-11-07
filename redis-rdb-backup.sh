@@ -37,6 +37,7 @@ TAR_BIN="$(which tar)"
 GZIP_BIN="$(which gzip)"
 REDIS_CLI_BIN="$(which redis-cli)"
 GZIP_COMPRESSION=4
+WORKSPACE_PATH_PREFIX="/tmp/.redis_rdbbackup_wspace_"
 
 
 # ////////////////////////////////////////////////////////////////////
@@ -106,7 +107,7 @@ function test_file_exists ()
 function create_tmp_workspace ()
 {
     mkdir "${1}" || return 1
-    chmod 700 "${1}"
+    chmod 700 "${1}" || return 1
 
     return 0
 }
@@ -121,7 +122,7 @@ function do_backup ()
     if ! test_dir_is_writeable "${1}"; then log true "${SCRIPT_NAME}: Error! Backup directory '${1}' does not exist (or is not writeable). Aborting."; exit ${E_BACKUP}; fi
 
     # Create temporary workspace
-    WORKSPACE="/tmp/.redis_backup_wspace_${RANDOM}"
+    WORKSPACE="${WORKSPACE_PATH_PREFIX}$(od -N 8 -t uL -An /dev/urandom | sed 's/\s//g')"
     create_tmp_workspace "${WORKSPACE}" || exit ${E_WORKSPACE}
 
     # Record the unixtime of the last successful DB SAVE redis performed
@@ -160,6 +161,7 @@ function do_backup ()
 
     # Tar and compress with gzip
     log "${SCRIPT_NAME}: Compressing..."
+    touch "${WORKSPACE}/${BACKUP_FILE}" || exit ${E_PKG}
     "${TAR_BIN}" --exclude="${BACKUP_FILE}" -cf - -C "${WORKSPACE}" . | "${GZIP_BIN}" -q -${GZIP_COMPRESSION} > "${WORKSPACE}/${BACKUP_FILE}"
 
     # Check there were no errors
@@ -205,7 +207,7 @@ while getopts "${OPTSPEC}" OPT; do
             BACKUP_FILE_MODE=${OPTARG}
             ;;
         t)
-            BACKUP_FILE_TIMESTAMP=${OPTARG} # Auto append ISO 8601 timestamp to backup file prefix
+            BACKUP_FILE_TIMESTAMP=${OPTARG} # If 'true', ISO 8601 timestamp will be auto-appended to backup_file_prefix
             ;;
         r)
             REDIS_HOST=${OPTARG}
@@ -215,7 +217,7 @@ while getopts "${OPTSPEC}" OPT; do
             ;;
         h)
             echo ""
-            echo "Usage: ${SCRIPT_NAME} -d backup_dir -f backup_file_prefix -o backup_file_owner -o backup_file_group -m backup_file_mode -t [true|false] -r redis_host -p redis_port"
+            echo "Usage: ${SCRIPT_NAME} -d backup_dir -f backup_file_prefix -o backup_file_owner -o backup_file_group -m backup_file_mode -t true|false -r redis_host -p redis_port"
             echo ""
             exit 0
             ;;
