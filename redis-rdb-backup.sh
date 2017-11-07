@@ -162,7 +162,7 @@ function do_backup ()
     # Tar and compress with gzip
     log "${SCRIPT_NAME}: Compressing..."
     touch "${WORKSPACE}/${BACKUP_FILE}" || exit ${E_PKG}
-    "${TAR_BIN}" --exclude="${BACKUP_FILE}" -cf - -C "${WORKSPACE}" . | "${GZIP_BIN}" -q -${GZIP_COMPRESSION} > "${WORKSPACE}/${BACKUP_FILE}"
+    "${TAR_BIN}" --exclude="${BACKUP_FILE}" -cf - -C "${WORKSPACE}" * | "${GZIP_BIN}" -q -${GZIP_COMPRESSION} > "${WORKSPACE}/${BACKUP_FILE}"
 
     # Check there were no errors
     if [ $? -ne 0 -o ${PIPESTATUS[0]} -ne 0 ]; then log true "${SCRIPT_NAME}: Error! tar or gzip reported an error. Aborting."; exit ${E_PKG}; fi

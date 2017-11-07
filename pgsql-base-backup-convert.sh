@@ -86,6 +86,8 @@ WORKSPACE_PATH_PREFIX="/tmp/.pgsql_convert_wspace_"
 POSTGRES_SERIVCE_NAME="postgresql"
 POSTGRES_OWNER="postgres"
 POSTGRES_GROUP="postgres"
+POSTGRES_STOP_SERIVCE_WAIT_SECS="5"
+POSTGRES_START_SERIVCE_WAIT_SECS="120"
 
 
 # ////////////////////////////////////////////////////////////////////
@@ -164,7 +166,7 @@ function do_import ()
 {
     # Stop postgres
     "${SERVICE_BIN}" ${POSTGRES_SERIVCE_NAME} stop
-    sleep 5
+    sleep ${POSTGRES_STOP_SERIVCE_WAIT_SECS}
 
     # Remove old postgres data dir (if present) and extract basebackup in to place
     test_dir_is_writeable "$(dirname "${2}")" || return 1
@@ -178,7 +180,7 @@ function do_import ()
 
     # Start postgres
     "${SERVICE_BIN}" ${POSTGRES_SERIVCE_NAME} start
-    sleep 45
+    sleep ${POSTGRES_START_SERIVCE_WAIT_SECS}
 
     log "${SCRIPT_NAME}: Import complete"
 
@@ -264,7 +266,7 @@ function do_export ()
 
     # Tar and compress
     touch "${1}/${2}" || return 1
-    "${TAR_BIN}" --exclude="${2}" -cf - -C "${1}" . | "${GZIP_BIN}" -q -${GZIP_COMPRESSION} > "${1}/${2}"
+    "${TAR_BIN}" --exclude="${2}" -cf - -C "${1}" * | "${GZIP_BIN}" -q -${GZIP_COMPRESSION} > "${1}/${2}"
 
     # Check there were no errors
     if [ $? -ne 0 -o ${PIPESTATUS[0]} -ne 0 ]; then return 1; fi

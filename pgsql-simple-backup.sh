@@ -185,7 +185,7 @@ function do_backup ()
 
     # Tar and compress
     touch "${WORKSPACE}/${BACKUP_FILE}" || exit ${E_PKG}
-    "${TAR_BIN}" --exclude="${BACKUP_FILE}" -cf - -C "${WORKSPACE}" . | "${GZIP_BIN}" -q -${GZIP_COMPRESSION} > "${WORKSPACE}/${BACKUP_FILE}"
+    "${TAR_BIN}" --exclude="${BACKUP_FILE}" -cf - -C "${WORKSPACE}" * | "${GZIP_BIN}" -q -${GZIP_COMPRESSION} > "${WORKSPACE}/${BACKUP_FILE}"
 
     # Check there were no errors
     if [ $? -ne 0 -o ${PIPESTATUS[0]} -ne 0 ]; then exit ${E_PKG}; fi
