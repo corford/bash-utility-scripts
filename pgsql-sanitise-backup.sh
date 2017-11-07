@@ -14,7 +14,7 @@
 # cluster role file dumped with `pg_dumpall -g --quote-all-identifiers` (in virtually
 # all cases the tar archive would also contain schema and/or table data for all the
 # databases in the cluster i.e. the source archive would be a backup produced with
-# something like pgsql-meta-backup.sh)
+# something like pgsql-simple-backup.sh)
 #
 # Note 2:
 # Resulting export tar.gz will mimic the contents of the source archive (except the
