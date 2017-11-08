@@ -7,9 +7,16 @@
 # Execute with -h flag to see required script params.
 #
 #
-# Note 1: Remote filename will be the source file with ".gpg" appended.
+# Note 1:
+# Remote filename will be the basename of the source file with ".gpg" appended.
 #
-# Note 2: Remember to add the public key of the host running this script to the
+# Note 2:
+# The public GPG key this script encrypts against must already be imported into
+# the default GPG keychain of the user running the script (usually located at
+# ~/.gnupg/pubring.gpg). To import a public key, run the following command as the
+# script user: gpg --import /path/to/pubkey.txt
+#
+# Note 3: Remember to add the public key of the host running this script to the
 # authorized_keys file of the remote host.
 #
 
@@ -120,6 +127,9 @@ function do_drop ()
     # Verify source file exists
     if ! test_file_exists "${1}"; then log true "${SCRIPT_NAME}: Error! Source file '${1}' does not exist (or is not readable). Aborting."; exit ${E_SOURCE}; fi
 
+    # Verify GPG key is available
+    "${GPG_BIN}" --list-keys "${6}" >/dev/null || exit ${E_ENCRYPT}
+
     # Create temporary workspace
     WORKSPACE="${WORKSPACE_PATH_PREFIX}$(od -N 8 -t uL -An /dev/urandom | sed 's/\s//g')"
     create_workspace "${WORKSPACE}" || exit ${E_WORKSPACE}
@@ -128,8 +138,8 @@ function do_drop ()
     REMOTE_FILE="$(basename "${1}")".gpg
 
     log "${SCRIPT_NAME}: Encrypting source file..."
-    "${GPG_BIN}" --no-greeting --no-default-keyring --no-options \
-    --no-auto-key-locate --no-auto-check-trustdb -q -z 0 -r "${6}" -e \
+    "${GPG_BIN}" --no-greeting --no-options --no-auto-check-trustdb \
+    --cipher-algo AES256 --batch --no-tty -q -e -z 0 -r "${6}" \
     -o "${WORKSPACE}/${REMOTE_FILE}" "${1}" || exit ${E_ENCRYPT}
 
     log "${SCRIPT_NAME}: Transferring to remote..."
@@ -181,7 +191,7 @@ while getopts "${OPTSPEC}" OPT; do
             ;;
         h)
             echo ""
-            echo "Usage: ${SCRIPT_NAME} -s source_file -k gpg_key_id -r remote_sftp_host -u remote_sftp_user -p remote_sftp_path -m remote_file_mode"
+            echo "Usage: ${SCRIPT_NAME} -s source_file -k gpg_pub_key_id -r remote_sftp_host -u remote_sftp_user -p remote_sftp_path -m remote_file_mode"
             echo ""
             exit 0
             ;;
