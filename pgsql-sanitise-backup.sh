@@ -23,9 +23,6 @@
 # the source archive, modify the $ROLE_FILE global var below to point to the correct
 # place within the original backup.
 #
-# Important: if the source archive contains any dot files, these will not be included
-# in the export archive.
-#
 # Note 3:
 # Script sets the new password as an MD5 hash according to the postgresql spec:
 # password concatenated with username and resulting hash prefixed with 'md5'
@@ -197,9 +194,9 @@ function do_conversion ()
     # Reset role user passwords
     if ! do_password_reset "${WORKSPACE}" "${9}"; then exit ${E_PASSWORD_RESET}; fi
 
-    # Tar and compress
+    # Tar and compress (Note: --transform 's/^\.//' is not supported by BSD tar, use -s '/.//' instead)
     touch "${WORKSPACE}/${EXPORT_FILE}" || exit ${E_PKG}
-    "${TAR_BIN}" --exclude="${EXPORT_FILE}" -cf - -C "${WORKSPACE}" * | "${GZIP_BIN}" -q -${GZIP_COMPRESSION} > "${WORKSPACE}/${EXPORT_FILE}"
+    "${TAR_BIN}" --exclude="${EXPORT_FILE}" --transform 's/^\.//' -cf - -C "${WORKSPACE}" . | "${GZIP_BIN}" -q -${GZIP_COMPRESSION} > "${WORKSPACE}/${EXPORT_FILE}"
 
     # Check there were no errors
     if [ $? -ne 0 -o ${PIPESTATUS[0]} -ne 0 ]; then exit ${E_PKG}; fi

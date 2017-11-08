@@ -128,10 +128,13 @@ function do_drop ()
     REMOTE_FILE="$(basename "${1}")".gpg
 
     log "${SCRIPT_NAME}: Encrypting source file..."
-    "${GPG_BIN}" -z 0 -r "${6}" -e -o "${WORKSPACE}/${REMOTE_FILE}" "${1}" || exit ${E_ENCRYPT}
+    "${GPG_BIN}" --no-greeting --no-default-keyring --no-options \
+    --no-auto-key-locate --no-auto-check-trustdb -q -z 0 -r "${6}" -e \
+    -o "${WORKSPACE}/${REMOTE_FILE}" "${1}" || exit ${E_ENCRYPT}
 
     log "${SCRIPT_NAME}: Transferring to remote..."
-    "${SFTP_BIN}" -o PasswordAuthentication=no -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=QUIET -q -b - ${3}@${2}:"${4}" <<END &>/dev/null
+    "${SFTP_BIN}" -o PasswordAuthentication=no -o StrictHostKeyChecking=no \
+    -o UserKnownHostsFile=/dev/null -o LogLevel=QUIET -q -b - ${3}@${2}:"${4}" <<END &>/dev/null
 put "${WORKSPACE}/${REMOTE_FILE}"
 chmod ${5} "${REMOTE_FILE}"
 quit
