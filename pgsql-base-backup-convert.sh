@@ -264,9 +264,9 @@ function do_export ()
         chmod 600 "${1}/${DB}/data.sql"
     done
 
-    # Tar and compress (Note: --transform 's/^\.//' is not supported by BSD tar, use -s '/.//' instead)
+    # Tar and compress (Note: --transform 's/^\.\///' is not supported by BSD tar, use -s '/.//' instead)
     touch "${1}/${2}" || return 1
-    "${TAR_BIN}" --exclude="${2}" --transform 's/^\.//' -cf - -C "${1}" . | "${GZIP_BIN}" -q -${GZIP_COMPRESSION} > "${1}/${2}"
+    "${TAR_BIN}" --exclude="${2}" --transform 's/^\.\///' -cf - -C "${1}" . | "${GZIP_BIN}" -q -${GZIP_COMPRESSION} > "${1}/${2}"
 
     # Check there were no errors
     if [ $? -ne 0 -o ${PIPESTATUS[0]} -ne 0 ]; then return 1; fi

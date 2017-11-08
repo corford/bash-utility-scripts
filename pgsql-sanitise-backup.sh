@@ -194,9 +194,9 @@ function do_conversion ()
     # Reset role user passwords
     if ! do_password_reset "${WORKSPACE}" "${9}"; then exit ${E_PASSWORD_RESET}; fi
 
-    # Tar and compress (Note: --transform 's/^\.//' is not supported by BSD tar, use -s '/.//' instead)
+    # Tar and compress (Note: --transform 's/^\.\///' is not supported by BSD tar, use -s '/.//' instead)
     touch "${WORKSPACE}/${EXPORT_FILE}" || exit ${E_PKG}
-    "${TAR_BIN}" --exclude="${EXPORT_FILE}" --transform 's/^\.//' -cf - -C "${WORKSPACE}" . | "${GZIP_BIN}" -q -${GZIP_COMPRESSION} > "${WORKSPACE}/${EXPORT_FILE}"
+    "${TAR_BIN}" --exclude="${EXPORT_FILE}" --transform 's/^\.\///' -cf - -C "${WORKSPACE}" . | "${GZIP_BIN}" -q -${GZIP_COMPRESSION} > "${WORKSPACE}/${EXPORT_FILE}"
 
     # Check there were no errors
     if [ $? -ne 0 -o ${PIPESTATUS[0]} -ne 0 ]; then exit ${E_PKG}; fi

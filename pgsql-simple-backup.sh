@@ -183,9 +183,9 @@ function do_backup ()
     # Set backup file name (with or without ISO 8601 timestamp)
     if [ ${6} = "true" ]; then BACKUP_FILE="${2}.$(date +%Y-%m-%dT%H-%M-%S).tar.gz"; else BACKUP_FILE="${2}.tar.gz"; fi
 
-    # Tar and compress (Note: --transform 's/^\.//' is not supported by BSD tar, use -s '/.//' instead)
+    # Tar and compress (Note: --transform 's/^\.\///' is not supported by BSD tar, use -s '/.//' instead)
     touch "${WORKSPACE}/${BACKUP_FILE}" || exit ${E_PKG}
-    "${TAR_BIN}" --exclude="${BACKUP_FILE}" --transform 's/^\.//' -cf - -C "${WORKSPACE}" . | "${GZIP_BIN}" -q -${GZIP_COMPRESSION} > "${WORKSPACE}/${BACKUP_FILE}"
+    "${TAR_BIN}" --exclude="${BACKUP_FILE}" --transform 's/^\.\///' -cf - -C "${WORKSPACE}" . | "${GZIP_BIN}" -q -${GZIP_COMPRESSION} > "${WORKSPACE}/${BACKUP_FILE}"
 
     # Check there were no errors
     if [ $? -ne 0 -o ${PIPESTATUS[0]} -ne 0 ]; then exit ${E_PKG}; fi
