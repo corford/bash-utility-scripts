@@ -138,8 +138,8 @@ function do_drop ()
     REMOTE_FILE="$(basename "${1}")".gpg
 
     log "${SCRIPT_NAME}: Encrypting source file..."
-    "${GPG_BIN}" --no-greeting --no-options --no-auto-check-trustdb \
-    --cipher-algo AES256 --batch --no-tty -q -e -z 0 -r "${6}" \
+    "${GPG_BIN}" --no-greeting --no-auto-check-trustdb --batch \
+    --no-tty --cipher-algo AES256 -q -e -z 0 -r "${6}" \
     -o "${WORKSPACE}/${REMOTE_FILE}" "${1}" || exit ${E_ENCRYPT}
 
     log "${SCRIPT_NAME}: Transferring to remote..."
