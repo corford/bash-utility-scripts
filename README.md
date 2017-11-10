@@ -1,8 +1,10 @@
 # bash-utility-scripts
 Collection of reasonably robust and portable bash scripts (mainly for backing up postgresql and redis).
 
-All scripts are designed to play nice with cron (you can safely redirect stdout to /dev/null and
-still get proper error codes and alerts if something goes wrong; including with piped commands).
+All scripts are designed to play nice with cron (you can safely redirect stdout to /dev/null and still
+get proper error codes and alerts if something goes wrong; including with piped commands). All destination
+files are atomically moved in to postion (so e.g. dev users don't accidentally pickup corrupted archvies
+while backups are being created).
 
 An effort has been made to use portable bash commands that should work on most GNU/BSD systems (although
 they have really only been tested on Linux).
