@@ -7,7 +7,7 @@ still get proper error codes and alerts if something goes wrong; including with 
 An effort has been made to use portable bash commands that should work on most GNU/BSD systems (although
 they have really only been tested on Linux).
 
-Each script has an -h flag that will show you what commands it requires and a description at the top
+Each script has an -h flag that will show you what commands it requires and contains a description at the top
 of the script file itself.
 
 # Typical workflows:
@@ -29,9 +29,9 @@ an LFTP trick, it follows the postgres docs recommendation and safely refuses to
 archive file)
 
 Use `redis-backup-wrapper.sh` to take a snapshot of a running redis instance and ship a GPG encrypted copy
-somehwere safe. Script guarnatees a flushed snapshot by running BGSAVE on the instance prior to backup.
+somehwere safe. Script guarantees a flushed snapshot by running BGSAVE on the instance prior to backup.
 
-Use `mirror-to-offsite.sh` as generic way to mirror files & dirs (rsync style) to a remote host. Works even
+Use `mirror-to-offsite.sh` as a generic way to mirror files & dirs (rsync style) to a remote host. Works even
 for remote sftp only jails that don't support rsyncand supports bandwidth limiting.
 
 Use `housekeeping.sh` to automatically clean-up old backups once they have been encrypted and shipped off-site.
