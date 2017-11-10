@@ -33,8 +33,8 @@ archive file)
 Use `redis-backup-wrapper.sh` to take a snapshot of a running redis instance and ship a GPG encrypted copy
 somehwere safe. Script guarantees a flushed snapshot by running BGSAVE on the instance prior to backup.
 
-Use `mirror-to-offsite.sh` as a generic way to mirror files & dirs (rsync style) to a remote host. Works even
-for remote sftp only jails that don't support rsyncand supports bandwidth limiting.
+Use `mirror-to-offsite.sh` as a generic way to mirror files & dirs (rsync style) to a remote host. Supports
+bandwidth limiting and works even for remote sftp only jails that don't support rsync.
 
 Use `housekeeping.sh` to automatically clean-up old backups once they have been encrypted and shipped off-site.
 
