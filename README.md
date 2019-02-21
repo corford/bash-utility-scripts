@@ -4,7 +4,7 @@ Collection of reasonably robust and portable bash scripts (mainly for backing up
 All scripts are designed to play nice with cron (you can safely redirect stdout to /dev/null and still
 get proper error codes and alerts if something goes wrong; including with piped commands). All destination
 files are atomically moved in to postion (so e.g. dev users don't accidentally pickup corrupted archvies
-while backups are being created).
+while snapshots are being created).
 
 An effort has been made to use portable bash commands that should work on most GNU/BSD systems (although
 they have really only been tested on Linux).
@@ -18,11 +18,11 @@ copy somewhere safe (e.g. https://rsync.net)
 
 Use `pgsql-base-backup-convert.sh` to convert the previously taken basebackup to raw SQL and optionally change
 role passwords and sanitise table data (useful for preparing an archive from a basebackup that can be pulled
-down by dev machines)
+down by your developers)
 
-Use `pgsql-simple-backup.sh` to take a pg_dump based backup of a cluster (with or without table data).
+Use `pgsql-simple-backup.sh` to take a pg_dump backup of a cluster (with or without table data).
 
-Use `pgsql-sanitise-backup.sh` against a pg_dumpall produced roles file to reset all cluster role passwords to
+Use `pgsql-sanitise-backup.sh` against pg_dumpall produced role files to reset all cluster passwords to
 a given string (again, useful for preparing bootstrap archives for dev machines that shouldn't see prod
 credentials)
 
@@ -36,5 +36,5 @@ somehwere safe. Script guarantees a flushed snapshot by running BGSAVE on the in
 Use `mirror-to-offsite.sh` as a generic way to mirror files & dirs (rsync style) to a remote host. Supports
 bandwidth limiting and works even for remote sftp only jails that don't support rsync.
 
-Use `housekeeping.sh` to automatically clean-up old backups once they have been encrypted and shipped off-site.
+Use `housekeeping.sh` to automatically clean up local copies of backups produced by the scripts above (once they have been encrypted and shipped off-site).
 
